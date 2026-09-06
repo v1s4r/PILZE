@@ -63,8 +63,15 @@ npm start            # python3 -m http.server 8080  → http://localhost:8080
 # oder: npx serve .
 ```
 
-Deployment: jeder statische Host funktioniert. Ein GitHub-Pages-Workflow liegt unter `.github/workflows/pages.yml`
-(Repository-Einstellungen → Pages → Source «GitHub Actions»).
+### Als Website veröffentlichen
+
+Ein GitHub-Pages-Workflow liegt unter `.github/workflows/pages.yml` und läuft bei jedem Push auf `main`,
+`master` oder den Arbeitsbranch. Einmalig nötig: **Repository → Settings → Pages → Source auf «GitHub Actions»
+stellen.** Danach ist die App unter `https://<user>.github.io/PILZE/` erreichbar; jeder weitere Push
+aktualisiert sie automatisch. (GitHub Pages ist im Gratis-Tarif nur für öffentliche Repositories verfügbar.)
+
+Sonst funktioniert jeder statische Host – die App besteht ausschliesslich aus statischen Dateien, es gibt
+keinen Build-Schritt und keinen Server.
 
 ## Tests
 

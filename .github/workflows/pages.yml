@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 'claude/pilzsucher-webapp-biotop-6bt5eg']
   workflow_dispatch:
 
 permissions:
