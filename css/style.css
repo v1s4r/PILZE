@@ -40,6 +40,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Muss vor den Klassenregeln stehen: sonst überstimmt ein `display: flex` einer Klasse
+   das hidden-Attribut und leere Container (Saison-Hinweis, Kartenlegende) blieben sichtbar. */
+[hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
 body {
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -130,6 +133,14 @@ button { cursor: pointer; }
 .tab-page { display: none; padding: 12px 16px 24px; overflow: auto; flex: 1; min-height: 0; }
 .tab-page.active { display: block; }
 
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.section-head h2 { margin-bottom: 8px; }
+.month-picker { font-size: 12.5px; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
+.month-picker select {
+  padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-1); font-size: 13px;
+}
+
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   border: 1px solid var(--border); background: var(--surface-2); color: var(--text-1);
@@ -212,6 +223,19 @@ tr.forecast td { color: var(--text-2); font-style: italic; }
 .factor .bar { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
 .factor .bar > i { display: block; height: 100%; background: var(--accent); }
 .factor .val { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.season-note {
+  font-size: 13.5px; border-radius: 8px; padding: 8px 10px; margin: 8px 0;
+  background: var(--accent-soft); border-left: 4px solid var(--warn); color: var(--text-1);
+}
+.season-note.aus { border-left-color: var(--bad); }
+.season-banner {
+  display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px;
+  border-radius: 8px; padding: 8px 10px; margin: 8px 0;
+  background: var(--accent-soft); border-left: 4px solid var(--warn);
+}
+.season-banner.aus { border-left-color: var(--bad); }
+.season-banner .icon { flex: none; }
+
 .kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 8px; font-size: 13.5px; margin: 8px 0; }
 .kv dt { color: var(--text-2); }
 .kv dd { margin: 0; }

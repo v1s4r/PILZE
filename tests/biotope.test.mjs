@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SPECIES, SPECIES_BY_ID, COMBINED, getSpecies } from '../js/model/species.js';
+import { SPECIES, SPECIES_BY_ID, COMBINED, getSpecies, seasonLeader } from '../js/model/species.js';
 import {
-  scoreCell, classify, trapezoid, treeFactor, forestFactor, aspectFactor, soilIndexFromRockText, aspectLabel, seasonFactor,
+  scoreCell, classify, trapezoid, treeFactor, forestFactor, aspectFactor, soilIndexFromRockText, aspectLabel, seasonFactor, seasonInfo,
 } from '../js/model/biotope.js';
 
 const steinpilz = SPECIES_BY_ID.steinpilz;
@@ -69,11 +69,60 @@ test('im Hochsommer sind Nordhänge besser, im Frühling Südhänge', () => {
   assert.equal(aspectFactor(steinpilz, 90, 1, 7), 0.92); // flach: neutral
 });
 
-test('Kombinierte Ansicht nimmt das Maximum', () => {
+test('Kombinierte Ansicht enthält alle Arten – auch die Morchel', () => {
+  assert.equal(COMBINED.combine.length, SPECIES.length);
+  for (const s of SPECIES) assert.ok(COMBINED.combine.includes(s.id), `${s.id} fehlt in der Sammelansicht`);
+  assert.ok(COMBINED.combine.includes('morchel'));
+});
+
+test('Kombinierte Ansicht nimmt das saisongewichtete Maximum', () => {
   const r = scoreCell(COMBINED, good, 9);
-  const singles = COMBINED.combine.map((id) => scoreCell(SPECIES_BY_ID[id], good, 9).score);
-  assert.equal(r.score, Math.max(...singles));
+  const weighted = COMBINED.combine.map((id) => scoreCell(SPECIES_BY_ID[id], good, 9).score * seasonFactor(SPECIES_BY_ID[id], 9));
+  assert.ok(Math.abs(r.score - Math.max(...weighted)) < 1e-9);
   assert.ok(COMBINED.combine.includes(r.speciesId));
+  assert.equal(r.season, seasonFactor(SPECIES_BY_ID[r.speciesId], 9));
+});
+
+test('Sammelansicht: im April gewinnt die Morchel, im September nicht', () => {
+  // kalkreicher, halboffener Laubwald in tiefer Lage: klassisches Morchel-Biotop
+  const auenwald = { elev: 500, slope: 10, aspect: 200, forestFrac: 0.5, decid: 0.9, soil: 0.85 };
+  assert.equal(scoreCell(COMBINED, auenwald, 4).speciesId, 'morchel');
+  assert.notEqual(scoreCell(COMBINED, auenwald, 9).speciesId, 'morchel');
+});
+
+test('Sammelansicht stuft Arten ausserhalb ihrer Saison zurück', () => {
+  const auenwald = { elev: 500, slope: 10, aspect: 200, forestFrac: 0.5, decid: 0.9, soil: 0.85 };
+  const april = scoreCell(COMBINED, auenwald, 4);
+  const januar = scoreCell(COMBINED, auenwald, 1);
+  assert.ok(april.score > januar.score * 2, `April ${april.score} vs Januar ${januar.score}`);
+});
+
+test('Einzelne Art: die Karte bleibt zeitlos, meldet die Saison aber separat', () => {
+  const morchel = SPECIES_BY_ID.morchel;
+  const auenwald = { elev: 500, slope: 10, aspect: 200, forestFrac: 0.5, decid: 0.9, soil: 0.85 };
+  const april = scoreCell(morchel, auenwald, 4);
+  const september = scoreCell(morchel, auenwald, 9);
+  // Standort-Potenzial ändert sich höchstens über die Exposition, nicht über die Saison
+  assert.ok(Math.abs(april.score - september.score) < 0.25, `${april.score} vs ${september.score}`);
+  assert.ok(september.score > 0.3, 'Morchel-Biotope bleiben auch im September sichtbar');
+  assert.equal(september.season, 0.12);
+  assert.equal(april.season, 1);
+});
+
+test('seasonInfo beschreibt den Saison-Status', () => {
+  assert.equal(seasonInfo(SPECIES_BY_ID.morchel, 4).state, 'hoch');
+  assert.equal(seasonInfo(SPECIES_BY_ID.morchel, 9).state, 'aus');
+  assert.equal(seasonInfo(SPECIES_BY_ID.steinpilz, 5).state, 'rand');
+  assert.equal(seasonInfo(SPECIES_BY_ID.steinpilz, 9).state, 'hoch');
+  assert.equal(seasonInfo(SPECIES_BY_ID.steinpilz, 6).state, 'saison');
+  assert.match(seasonInfo(SPECIES_BY_ID.morchel, 9).text, /Mär–Mai/);
+});
+
+test('seasonLeader liefert je Monat eine plausible Leitart', () => {
+  assert.equal(seasonLeader(4).id, 'morchel');
+  const herbst = seasonLeader(10);
+  assert.ok(herbst.season[0] <= 10 && herbst.season[1] >= 10, `${herbst.id} passt nicht in den Oktober`);
+  for (let m = 1; m <= 12; m++) assert.ok(seasonLeader(m).id, `Monat ${m} ohne Leitart`);
 });
 
 test('Gesteinstexte -> Säure-Index', () => {

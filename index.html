@@ -43,9 +43,15 @@
       </nav>
 
       <section class="tab-page active" data-page="karte" role="tabpanel">
-        <h2>Pilzart</h2>
+        <div class="section-head">
+          <h2>Pilzart</h2>
+          <label class="month-picker">Monat
+            <select id="month-select" aria-label="Monat für Saison und Exposition"></select>
+          </label>
+        </div>
         <div id="species-list" class="chips" role="radiogroup" aria-label="Pilzart"></div>
         <p id="species-tip" class="tip"></p>
+        <div id="season-banner" class="season-banner" hidden></div>
 
         <div class="row">
           <button id="btn-analyze" type="button" class="primary">Ausschnitt analysieren</button>
@@ -64,9 +70,6 @@
 
         <details class="settings">
           <summary>Einstellungen</summary>
-          <label>Jahreszeit (für Exposition &amp; Saison)
-            <select id="month-select"></select>
-          </label>
           <label>Deckkraft der roten Flächen <span id="opacity-value"></span>
             <input id="opacity" type="range" min="0.2" max="1" step="0.05">
           </label>
@@ -74,6 +77,10 @@
             <input id="threshold" type="range" min="0.15" max="0.7" step="0.05">
           </label>
           <label class="check"><input id="include-soil" type="checkbox" checked> Geologie/Bodensäure abfragen (langsamer)</label>
+          <div class="row">
+            <button id="btn-clear-cache" type="button">Zwischenspeicher leeren</button>
+          </div>
+          <p class="muted small">Leert die lokal gespeicherten Geologie- und Wetterdaten. Wald- und Höhendaten werden ohnehin bei jeder Analyse frisch geladen.</p>
         </details>
       </section>
 
@@ -121,6 +128,25 @@
           <li><strong>Regen-Timing</strong> – Open-Meteo: Niederschlag und Temperaturen der letzten 30 Tage plus 7 Tage Prognose; daraus ein täglicher Pilz-Index.</li>
         </ul>
         <p>Die Faktoren werden gewichtet multipliziert (Wald und Höhe sind Ausschlusskriterien, Boden, Exposition und Neigung verfeinern). Rote Flächen markieren Zellen über der Anzeigeschwelle.</p>
+
+        <h2>Saison: Karte gegen Pilzwetter</h2>
+        <p>Standort und Zeitpunkt sind zwei verschiedene Fragen, deshalb behandelt die App sie getrennt:</p>
+        <ul>
+          <li><strong>Eine einzelne Art gewählt</strong> – die Karte zeigt das zeitlose <em>Standort-Potenzial</em>. Du siehst die Morchel-Biotope also auch im Oktober, was zum Plätze-Suchen für nächsten Frühling nützlich ist. Ein Hinweis über der Karte sagt, wenn die Art gerade nicht fruchtet.</li>
+          <li><strong>«Alle Speisepilze» gewählt</strong> – die Karte zeigt je Zelle die Art, die im gewählten Monat am besten passt. Im April gewinnen so die Morcheln, im Oktober die Herbsttrompete; Arten ausserhalb ihrer Saison werden zurückgestuft.</li>
+          <li><strong>Tab «Pilzwetter»</strong> – hier fliesst die Saison immer ein, zusammen mit Regen, Temperatur und Frost.</li>
+        </ul>
+        <p>Über den Monatswähler in den Einstellungen kannst du jede Jahreszeit durchspielen.</p>
+
+        <h2>Wie aktuell sind die Daten?</h2>
+        <p>Die App speichert keine Wald- und Höhendaten zwischen: bei jeder Analyse werden sie frisch von geo.admin.ch geladen. Neue Bundesdaten sind also automatisch drin. Die Datensätze selbst werden aber in Zyklen nachgeführt, nicht laufend:</p>
+        <ul>
+          <li><strong>Waldmischungsgrad LFI</strong> – aus Sentinel-Satellitenbildstapeln der Vorjahre modelliert, Datenstand 2023.</li>
+          <li><strong>swissALTI3D</strong> – Nachführung in einem Sechsjahreszyklus, pro Jahr wird ein Sechstel der Schweiz neu erfasst.</li>
+          <li><strong>Geologie GK500</strong> – Übersichtskarte 1:500'000, praktisch unveränderlich (deshalb lokal zwischengespeichert).</li>
+          <li><strong>Wetter</strong> – stündlich aktualisiert, in der App 30 Minuten zwischengespeichert.</li>
+        </ul>
+        <p><strong>Das heisst konkret:</strong> Eine Abholzung, ein Sturmschaden oder ein Borkenkäferbefall aus den letzten Monaten steckt noch nicht in den Walddaten – der Kahlschlag erscheint erst mit dem nächsten Datenupdate. Blende zur Kontrolle das Luftbild oder die Vegetationshöhe ein und vergleiche mit dem, was du vor Ort siehst.</p>
         <h2>Wichtig</h2>
         <ul>
           <li>Nur sammeln, was du sicher bestimmen kannst. Im Zweifel zur Pilzkontrolle (VAPKO).</li>

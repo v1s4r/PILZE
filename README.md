@@ -10,7 +10,7 @@ komplett im Browser.
 ## Funktionen
 
 - **Biotop-Analyse** des sichtbaren Kartenausschnitts (ab Zoomstufe 11), automatisch nach jeder Kartenbewegung oder per Knopf.
-- **12 Pilzarten** mit eigenem Biotop-Profil (Steinpilz, Eierschwämmli, Maronenröhrling, Trompetenpfifferling, Herbsttrompete, Semmelstoppelpilz, Hexenröhrling, Fichtenreizker, Birkenpilz/Rotkappe, Krause Glucke, Morcheln, Parasol) plus «Alle Speisepilze».
+- **12 Pilzarten** mit eigenem Biotop-Profil (Steinpilz, Eierschwämmli, Maronenröhrling, Trompetenpfifferling, Herbsttrompete, Semmelstoppelpilz, Hexenröhrling, Fichtenreizker, Birkenpilz/Rotkappe, Krause Glucke, Morcheln, Parasol) plus «Alle Speisepilze», das je Zelle die im gewählten Monat passendste Art zeigt.
 - **Rote Flächen** (drei Stufen: gering / mittel / hoch) als geglättetes Overlay über der Landeskarte oder dem Luftbild.
 - **Standort-Check**: Klick auf die Karte zeigt Höhe, Hangneigung, Exposition, Waldanteil, Laub-/Nadelholzanteil, Gestein/Bodensäure und den Beitrag jedes Faktors.
 - **Pilzwetter / Regen-Timing**: Niederschlag und Temperaturen der letzten 30 Tage plus 7 Tage Prognose, daraus ein täglicher Pilz-Index mit Erklärung («Letzter ergiebiger Regen vor 9 Tagen … nächste günstige Phase ab Do»).
@@ -37,6 +37,22 @@ Wald und Höhe wirken als Ausschlusskriterien, die übrigen Faktoren verfeinern.
 
 Alle Modellparameter (Höhenbereiche, Baumpartner, Säure-Präferenz, Regen-Verzögerung, Temperaturfenster) sind
 bewusst als einfache Zahlenprofile hinterlegt und lassen sich in `js/model/species.js` anpassen.
+
+### Saison: Karte gegen Pilzwetter
+
+Standort und Zeitpunkt sind zwei verschiedene Fragen, deshalb behandelt die App sie getrennt:
+
+- **Einzelne Art gewählt** – die Karte zeigt das zeitlose *Standort-Potenzial*. Morchel-Biotope sind also auch
+  im Oktober sichtbar, was zum Plätze-Suchen für den nächsten Frühling nützlich ist. Ein Banner über der Karte
+  und eine Zeile im Standort-Check weisen darauf hin, wenn die Art gerade nicht fruchtet.
+- **«Alle Speisepilze» gewählt** – hier fliesst die Saison in den Score ein (`seasonFactor` in `js/model/biotope.js`):
+  die Karte zeigt je Zelle die Art, die im gewählten Monat am besten passt. Im April gewinnen die Morcheln,
+  im Oktober die Herbsttrompete, im Januar bleibt alles blass.
+- **Tab «Pilzwetter»** – die Saison zählt immer mit. Für die Sammelansicht wird die Leitart des Monats
+  (`seasonLeader`) verwendet, weil die Fruchtungsfenster je Art verschieden lang sind.
+
+Der Monatswähler neben der Artauswahl erlaubt es, jede Jahreszeit durchzuspielen; standardmässig steht er
+auf dem aktuellen Monat.
 
 ## Starten
 
@@ -71,6 +87,24 @@ Overlay, Standort-Check, Wetterdiagramm, Suche und Plätze ohne Internetverbindu
 - `api.open-meteo.com` – Niederschlag, Temperatur, Bodentemperatur (6 cm)
 
 Geodaten © swisstopo, BAFU, WSL (Open Government Data). Wetter © Open-Meteo.com (CC BY 4.0). Karte: Leaflet (BSD-2).
+
+## Wie aktuell sind die Daten?
+
+Die App speichert keine Wald- und Höhendaten zwischen: bei jeder Analyse werden sie frisch von geo.admin.ch
+geladen (`current`-Zeitstempel in WMTS/WMS). Neue Bundesdaten sind also automatisch drin, ohne Codeänderung.
+Die Datensätze selbst werden aber in Zyklen nachgeführt, nicht laufend:
+
+| Datensatz | Nachführung |
+|---|---|
+| Waldmischungsgrad LFI | aus Sentinel-Bildstapeln der Vorjahre modelliert, Datenstand 2023 |
+| swissALTI3D | Sechsjahreszyklus, pro Jahr wird ein Sechstel der Schweiz neu erfasst |
+| Geologie GK500 | Übersichtskarte 1:500'000, praktisch unveränderlich (lokal zwischengespeichert) |
+| Wetter (Open-Meteo) | stündlich, in der App 30 Minuten zwischengespeichert |
+
+**Konkret:** Eine Abholzung, ein Sturmschaden oder ein Borkenkäferbefall aus den letzten Monaten steckt noch
+nicht in den Walddaten – der Kahlschlag erscheint erst mit dem nächsten Datenupdate des Bundes. Zur Kontrolle
+lassen sich das Luftbild und die Vegetationshöhe als Layer einblenden. Über «Zwischenspeicher leeren» in den
+Einstellungen werden die lokal gespeicherten Geologie- und Wetterdaten verworfen.
 
 ## Bekannte Grenzen
 

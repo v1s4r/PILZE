@@ -87,14 +87,42 @@ export function warmSeasonWeight(month) {
   return table[month] ?? 0.5;
 }
 
+export const MONTH_SHORT = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+
+function monthInRange(month, [a, b]) {
+  return a <= b ? month >= a && month <= b : month >= a || month <= b;
+}
+
+/**
+ * Saison-Gewicht einer Art im gegebenen Monat: 1 in der Saison, 0.45 im Randmonat, sonst 0.12.
+ * Wird für die Sammelansicht und für den Pilz-Index verwendet – bei einer einzeln gewählten Art
+ * bleibt die Karte bewusst zeitlos (sie zeigt das Standort-Potenzial, nicht die aktuelle Fruchtung).
+ */
 export function seasonFactor(species, month) {
+  if (monthInRange(month, species.season)) return 1;
   const [a, b] = species.season;
-  const inSeason = a <= b ? month >= a && month <= b : month >= a || month <= b;
-  if (inSeason) return 1;
-  const before = ((a - month + 12) % 12);
-  const after = ((month - b + 12) % 12);
+  const before = (a - month + 12) % 12;
+  const after = (month - b + 12) % 12;
   if (before === 1 || after === 1) return 0.45;
   return 0.12;
+}
+
+/** Saison-Status einer Art für die Anzeige. */
+export function seasonInfo(species, month) {
+  const factor = seasonFactor(species, month);
+  const [a, b] = species.season;
+  const range = `${MONTH_SHORT[a - 1]}–${MONTH_SHORT[b - 1]}`;
+  const peak = species.peak ? `${MONTH_SHORT[species.peak[0] - 1]}–${MONTH_SHORT[species.peak[1] - 1]}` : null;
+  let state = 'aus';
+  if (factor === 1) state = species.peak && monthInRange(month, species.peak) ? 'hoch' : 'saison';
+  else if (factor > 0.12) state = 'rand';
+  const texts = {
+    hoch: `Hauptsaison (${peak || range})`,
+    saison: `In der Saison (${range})`,
+    rand: `Randmonat – Saison ist ${range}`,
+    aus: `Ausserhalb der Saison – Saison ist ${range}`,
+  };
+  return { factor, state, range, peak, text: texts[state] };
 }
 
 /**
@@ -105,10 +133,17 @@ export function seasonFactor(species, month) {
  */
 export function scoreCell(species, cell, month) {
   if (species.combine) {
+    // Sammelansicht: die je Zelle beste Art, gewichtet mit ihrer Saison-Passung.
     let best = null;
     for (const id of species.combine) {
-      const r = scoreCell(SPECIES_BY_ID[id], cell, month);
-      if (!best || r.score > best.score) best = { ...r, speciesId: id };
+      const sp = SPECIES_BY_ID[id];
+      if (!sp) continue;
+      const r = scoreCell(sp, cell, month);
+      const season = species.seasonWeighted ? seasonFactor(sp, month) : 1;
+      const weighted = r.score * season;
+      if (!best || weighted > best.score) {
+        best = { score: weighted, factors: r.factors, speciesId: id, biotopeScore: r.score, season };
+      }
     }
     return best;
   }
@@ -120,13 +155,16 @@ export function scoreCell(species, cell, month) {
     aspect: aspectFactor(species, cell.aspect, cell.slope, month),
     slope: slopeFactor(species, cell.slope),
   };
-  const score = f.forest *
+  const score = clamp(f.forest *
     Math.pow(f.trees, WEIGHTS.trees) *
     Math.pow(f.elevation, WEIGHTS.elevation) *
     Math.pow(f.soil, WEIGHTS.soil) *
     Math.pow(f.aspect, WEIGHTS.aspect) *
-    Math.pow(f.slope, WEIGHTS.slope);
-  return { score: clamp(score, 0, 1), factors: f, speciesId: species.id };
+    Math.pow(f.slope, WEIGHTS.slope), 0, 1);
+  // Bei einer einzeln gewählten Art fliesst die Saison NICHT in den Score ein: die Karte zeigt das
+  // Standort-Potenzial, damit man Plätze auch ausserhalb der Saison suchen kann. Die UI weist auf
+  // die Saison hin, und der Pilz-Index im Tab «Pilzwetter» berücksichtigt sie.
+  return { score, factors: f, speciesId: species.id, biotopeScore: score, season: seasonFactor(species, month) };
 }
 
 export const CLASSES = [

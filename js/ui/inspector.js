@@ -1,7 +1,7 @@
 // Standort-Check: zeigt die Faktoren einer Zelle bzw. eines Punkts.
 
 import { el, clear, fmtNum, fmtPct } from './dom.js';
-import { classify, aspectLabel, soilLabel, WEIGHTS } from '../model/biotope.js';
+import { classify, aspectLabel, soilLabel, seasonInfo, WEIGHTS } from '../model/biotope.js';
 import { SPECIES_BY_ID } from '../model/species.js';
 
 const FACTOR_LABELS = {
@@ -22,11 +22,18 @@ export function renderInspector(container, data) {
   const { lat, lon, cell, result, species } = data;
   const cls = classify(result.score);
   const shownSpecies = species.combine ? SPECIES_BY_ID[result.speciesId] : species;
+  const season = seasonInfo(shownSpecies, data.month);
 
   container.append(el('div', { class: 'row' }, [
     el('span', { class: 'score-badge', text: `${cls.label} · ${Math.round(result.score * 100)}`, style: { background: cls.color === 'transparent' ? 'var(--muted)' : cls.color } }),
     el('span', { class: 'muted small', text: species.combine ? `beste Art: ${shownSpecies.name}` : shownSpecies.name }),
   ]));
+  if (season.state === 'aus' || season.state === 'rand') {
+    container.append(el('p', { class: `season-note ${season.state}` }, [
+      el('strong', { text: season.state === 'aus' ? 'Ausserhalb der Saison. ' : 'Randmonat. ' }),
+      el('span', { text: `${shownSpecies.name}: Saison ${season.range}. Die Bewertung oben zeigt das Standort-Potenzial – jetzt ist keine Fruchtung zu erwarten.` }),
+    ]));
+  }
   if (data.partial) {
     container.append(el('p', { class: 'tip', text: 'Punkt liegt ausserhalb der letzten Analyse – es wurden nur Höhe und Geologie abgefragt. Starte die Analyse für diesen Ausschnitt, um Wald, Neigung und Exposition zu sehen.' }));
   }
@@ -41,6 +48,7 @@ export function renderInspector(container, data) {
   kv('Laubholzanteil', cell.decid == null ? '–' : `${fmtPct(cell.decid)} ${treeMixLabel(cell.decid)}`);
   kv('Boden', `${soilLabel(cell.soil)}${cell.soilLabel ? ` – ${cell.soilLabel}` : ''}`);
   kv('Baumpartner', shownSpecies.partners || '–');
+  kv('Saison', season.text);
   container.append(dl);
 
   container.append(el('h2', { text: 'Faktoren' }));

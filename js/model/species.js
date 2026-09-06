@@ -162,16 +162,37 @@ export const SPECIES = [
 
 export const SPECIES_BY_ID = Object.fromEntries(SPECIES.map((s) => [s.id, s]));
 
-/** Kombinierte Ansicht: das Maximum der wichtigsten Arten. */
+/**
+ * Kombinierte Ansicht: alle Arten, gewichtet mit der Saison.
+ * Im April gewinnen so die Morcheln, im Oktober die Herbsttrompete, im Januar bleibt alles blass.
+ */
 export const COMBINED = {
   id: 'alle',
   name: 'Alle Speisepilze',
-  latin: 'Maximum aus Steinpilz, Eierschwämmli, Maronen, Trompetenpfifferling, Herbsttrompete',
+  latin: 'Beste Art je Zelle für den gewählten Monat',
   icon: '🧺',
-  combine: ['steinpilz', 'eierschwaemmli', 'maronen', 'trompeten', 'herbsttrompete'],
-  season: [6, 11],
+  combine: SPECIES.map((s) => s.id),
+  seasonWeighted: true,
+  season: [3, 11],
   rain: { lagMin: 6, lagMax: 16, eventMm: 10, tMin: 5, tOptLo: 10, tOptHi: 20, tMax: 26, frost: 'sensitiv' },
 };
+
+/**
+ * Leitart eines Monats: die Art mit der besten Saison-Passung (bei Gleichstand die erste).
+ * Wird für das Regen-Timing der Sammelansicht verwendet, weil die Fruchtungsfenster je Art variieren.
+ */
+export function seasonLeader(month) {
+  let best = SPECIES[0]; let bestF = -1;
+  for (const s of SPECIES) {
+    const [a, b] = s.season;
+    const inSeason = a <= b ? month >= a && month <= b : month >= a || month <= b;
+    const [pa, pb] = s.peak || s.season;
+    const inPeak = pa <= pb ? month >= pa && month <= pb : month >= pa || month <= pb;
+    const f = inPeak ? 2 : inSeason ? 1 : 0;
+    if (f > bestF) { bestF = f; best = s; }
+  }
+  return best;
+}
 
 export function getSpecies(id) {
   if (id === COMBINED.id) return COMBINED;

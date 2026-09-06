@@ -84,6 +84,46 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
     expect(errors, errors.join('\n')).toEqual([]);
   });
 
+  test('Morcheln: Saison-Hinweis, Monatswechsel und Sammelansicht', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+    await installMocks(page);
+    await page.goto('/#13/47.05000/8.30000/morchel');
+    await expect(page.locator('#status-text')).toContainText('Zellen', { timeout: 30_000 });
+
+    // Morcheln sind wählbar und werden angezeigt – im September mit deutlichem Saison-Hinweis
+    await expect(page.locator('#species-list .chip.active')).toContainText('Morcheln');
+    await page.locator('#month-select').selectOption('9');
+    await expect(page.locator('#season-banner')).toBeVisible();
+    await expect(page.locator('#season-banner')).toContainText('ausserhalb der Saison');
+    await expect(page.locator('#season-banner')).toContainText('März–Mai');
+    // Die roten Flächen bleiben trotzdem sichtbar (Standort-Potenzial)
+    await expect(page.locator('img.heat-overlay')).toHaveAttribute('src', /^data:image\/png/);
+
+    // Im April verschwindet der Hinweis
+    await page.locator('#month-select').selectOption('4');
+    await expect(page.locator('#season-banner')).toBeHidden();
+
+    // Sammelansicht im April führt die Morchel als Leitart
+    await page.locator('#species-list .chip', { hasText: 'Alle Speisepilze' }).click();
+    await expect(page.locator('#species-tip')).toContainText('April');
+    await page.locator('.tabs [data-tab="wetter"]').click();
+    await expect(page.locator('#weather-status')).toContainText('Morcheln');
+    await expect(page.locator('#weather-status')).toContainText('Leitart');
+    await page.screenshot({ path: 'e2e/screenshots/saison-april.png' });
+
+    // Standort-Check nennt die Saison
+    await page.locator('.tabs [data-tab="karte"]').click();
+    await page.locator('#month-select').selectOption('10');
+    await page.locator('#species-list .chip', { hasText: 'Morcheln' }).click();
+    const box = await page.locator('#map').boundingBox();
+    await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.5);
+    await expect(page.locator('#inspector')).toContainText('Ausserhalb der Saison');
+    await expect(page.locator('#inspector .season-note')).toBeVisible();
+
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
   test('Mobile Layout', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 780 });
     const counters = {};
@@ -101,5 +141,8 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
     await page.goto('/#8/46.95000/8.10000/steinpilz');
     await expect(page.locator('#fab-analyze')).toBeDisabled();
     await expect(page.locator('#fab-analyze')).toContainText('Näher zoomen');
+    // hidden-Attribut muss auch bei Flex-Containern greifen
+    await expect(page.locator('#map-legend')).toBeHidden();
+    await expect(page.locator('#season-banner')).toBeHidden();
   });
 });

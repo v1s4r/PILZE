@@ -1,8 +1,8 @@
 // Einstiegspunkt: verdrahtet Karte, Analyse, Wetter und Panel.
 
 import { CONFIG, wmtsUrl } from './config.js';
-import { SPECIES, COMBINED, getSpecies } from './model/species.js';
-import { scoreCell, classify } from './model/biotope.js';
+import { SPECIES, COMBINED, getSpecies, seasonLeader } from './model/species.js';
+import { scoreCell, classify, seasonInfo } from './model/biotope.js';
 import { computeRainTiming, describeTiming, indexLabel } from './model/rain.js';
 import { buildGrid, analyze, rescore, cellAt, cellIndexAt } from './analysis/grid.js';
 import { soilAt } from './analysis/geology.js';
@@ -134,7 +134,30 @@ function renderSpeciesChips() {
     }, [el('span', { text: s.icon, 'aria-hidden': 'true' }), el('span', { text: s.name })]));
   }
   const sp = getSpecies(state.speciesId);
-  $('species-tip').textContent = sp.combine ? `${sp.latin}.` : `${sp.latin} · Baumpartner: ${sp.partners} · Höhe ${sp.elevation[1]}–${sp.elevation[2]} m (max. ${sp.elevation[3]} m) · Saison ${MONTHS[sp.season[0] - 1]}–${MONTHS[sp.season[1] - 1]}.`;
+  const leader = seasonLeader(state.month);
+  $('species-tip').textContent = sp.combine
+    ? `Zeigt je Zelle die Art mit dem besten Potenzial im ${MONTHS[state.month - 1]} – aktuell meist ${leader.name}. Arten ausserhalb ihrer Saison werden zurückgestuft.`
+    : `${sp.latin} · Baumpartner: ${sp.partners} · Höhe ${sp.elevation[1]}–${sp.elevation[2]} m (max. ${sp.elevation[3]} m) · Saison ${MONTHS[sp.season[0] - 1]}–${MONTHS[sp.season[1] - 1]}.`;
+  renderSeasonBanner(sp);
+}
+
+/** Weist darauf hin, wenn die gewählte Art im gewählten Monat nicht fruchtet. */
+function renderSeasonBanner(sp) {
+  const box = $('season-banner');
+  clear(box);
+  box.className = 'season-banner';
+  if (sp.combine) { box.hidden = true; return; }
+  const info = seasonInfo(sp, state.month);
+  if (info.state === 'saison' || info.state === 'hoch') { box.hidden = true; return; }
+  box.hidden = false;
+  box.className = `season-banner ${info.state}`;
+  box.append(
+    el('span', { class: 'icon', text: info.state === 'aus' ? '🚫' : '⏳', 'aria-hidden': 'true' }),
+    el('span', {}, [
+      el('strong', { text: `${sp.name}: ${info.state === 'aus' ? 'ausserhalb der Saison' : 'Randmonat'} im ${MONTHS[state.month - 1]}. ` }),
+      el('span', { text: `Saison ${MONTHS[sp.season[0] - 1]}–${MONTHS[sp.season[1] - 1]}. Die roten Flächen zeigen weiterhin das Standort-Potenzial – gut zum Plätze-Suchen, aber jetzt ist keine Fruchtung zu erwarten.` }),
+    ]),
+  );
 }
 function setSpecies(id) {
   state.speciesId = id;
@@ -167,6 +190,13 @@ showSliderValues();
 opacityInput.addEventListener('input', () => { state.opacity = Number(opacityInput.value); heat.setOpacity(state.opacity); showSliderValues(); saveSettings(); });
 thresholdInput.addEventListener('change', () => { state.threshold = Number(thresholdInput.value); showSliderValues(); saveSettings(); if (state.result) { heat.update(state.result, { threshold: state.threshold }); updateStatus(); } });
 thresholdInput.addEventListener('input', showSliderValues);
+$('btn-clear-cache').addEventListener('click', () => {
+  try {
+    localStorage.removeItem(CONFIG.storageKeys.geology);
+    localStorage.removeItem(CONFIG.storageKeys.weather);
+  } catch (_) { /* ignore */ }
+  toast('Zwischenspeicher geleert. Die nächste Analyse lädt alles neu.');
+});
 
 // ---------- Analyse ----------
 const fab = $('fab-analyze');
@@ -305,7 +335,10 @@ async function updateWeather(lat, lon, label, elevation) {
 
 function renderWeather() {
   if (!state.weather) return;
-  const species = getSpecies(state.speciesId);
+  const selected = getSpecies(state.speciesId);
+  // Die Fruchtungsfenster unterscheiden sich je Art. Für die Sammelansicht rechnen wir deshalb mit
+  // der Leitart des gewählten Monats (im April die Morchel, im Oktober die Herbsttrompete).
+  const species = selected.combine ? seasonLeader(state.month) : selected;
   const timing = computeRainTiming(state.weather.data.days, species);
   state.weather.timing = timing;
   const card = $('weather-status');
@@ -315,7 +348,7 @@ function renderWeather() {
   card.className = `status-card ${lab.key}`;
   card.append(
     el('span', { class: 'big', text: `${Math.round(timing.today.index * 100)} %` }),
-    el('span', {}, [el('strong', { text: `${lab.emoji} ${lab.text}` }), el('br'), el('span', { class: 'small', text: `Pilz-Index heute für ${species.name}` })]),
+    el('span', {}, [el('strong', { text: `${lab.emoji} ${lab.text}` }), el('br'), el('span', { class: 'small', text: selected.combine ? `Pilz-Index heute für ${species.name} (Leitart im ${MONTHS[state.month - 1]})` : `Pilz-Index heute für ${species.name}` })]),
   );
   $('weather-text').textContent = describeTiming(timing);
   if (document.querySelector('.tab-page[data-page="wetter"]').classList.contains('active')) {
