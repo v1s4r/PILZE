@@ -3,6 +3,7 @@
 import { CONFIG, wmtsUrl } from './config.js';
 import { SPECIES, COMBINED, getSpecies, seasonLeader } from './model/species.js';
 import { scoreCell, classify, seasonInfo } from './model/biotope.js';
+import { selectThreshold } from './model/heat.js';
 import { computeRainTiming, describeTiming, indexLabel } from './model/rain.js';
 import { buildGrid, analyze, rescore, cellAt, cellIndexAt } from './analysis/grid.js';
 import { soilAt } from './analysis/geology.js';
@@ -26,7 +27,8 @@ const state = {
   auto: true,
   includeSoil: true,
   opacity: CONFIG.heat.opacity,
-  threshold: CONFIG.heat.threshold,
+  topFraction: CONFIG.heat.topFraction,
+  heatInfo: null,
   result: null,
   analyzing: null,
   selected: null,
@@ -43,13 +45,13 @@ function loadSettings() {
     if (typeof s.auto === 'boolean') state.auto = s.auto;
     if (typeof s.includeSoil === 'boolean') state.includeSoil = s.includeSoil;
     if (Number.isFinite(s.opacity)) state.opacity = s.opacity;
-    if (Number.isFinite(s.threshold)) state.threshold = s.threshold;
+    if (Number.isFinite(s.topFraction)) state.topFraction = s.topFraction;
   } catch (_) { /* ignore */ }
 }
 function saveSettings() {
   try {
-    const { speciesId, auto, includeSoil, opacity, threshold } = state;
-    localStorage.setItem(CONFIG.storageKeys.settings, JSON.stringify({ speciesId, auto, includeSoil, opacity, threshold }));
+    const { speciesId, auto, includeSoil, opacity, topFraction } = state;
+    localStorage.setItem(CONFIG.storageKeys.settings, JSON.stringify({ speciesId, auto, includeSoil, opacity, topFraction }));
   } catch (_) { /* ignore */ }
 }
 
@@ -167,8 +169,7 @@ function setSpecies(id) {
   updateHash();
   if (state.result) {
     rescore(state.result, getSpecies(id), state.month);
-    heat.update(state.result, { threshold: state.threshold });
-    updateStatus();
+    drawHeat();
   }
   if (state.selected) inspectPoint(L.latLng(state.selected.lat, state.selected.lon), { silent: true });
   renderWeather();
@@ -185,12 +186,15 @@ $('auto-analyze').addEventListener('change', (e) => { state.auto = e.target.chec
 $('include-soil').checked = state.includeSoil;
 $('include-soil').addEventListener('change', (e) => { state.includeSoil = e.target.checked; saveSettings(); });
 const opacityInput = $('opacity'); opacityInput.value = String(state.opacity);
-const thresholdInput = $('threshold'); thresholdInput.value = String(state.threshold);
-const showSliderValues = () => { $('opacity-value').textContent = `${Math.round(state.opacity * 100)} %`; $('threshold-value').textContent = state.threshold.toFixed(2); };
+const topInput = $('top-fraction'); topInput.value = String(Math.round(state.topFraction * 100));
+const showSliderValues = () => {
+  $('opacity-value').textContent = `${Math.round(state.opacity * 100)} %`;
+  $('top-fraction-value').textContent = `beste ${Math.round(state.topFraction * 100)} %`;
+};
 showSliderValues();
 opacityInput.addEventListener('input', () => { state.opacity = Number(opacityInput.value); heat.setOpacity(state.opacity); showSliderValues(); saveSettings(); });
-thresholdInput.addEventListener('change', () => { state.threshold = Number(thresholdInput.value); showSliderValues(); saveSettings(); if (state.result) { heat.update(state.result, { threshold: state.threshold }); updateStatus(); } });
-thresholdInput.addEventListener('input', showSliderValues);
+topInput.addEventListener('change', () => { state.topFraction = Number(topInput.value) / 100; showSliderValues(); saveSettings(); drawHeat(); });
+topInput.addEventListener('input', () => { state.topFraction = Number(topInput.value) / 100; showSliderValues(); });
 $('btn-clear-cache').addEventListener('click', () => {
   try {
     localStorage.removeItem(CONFIG.storageKeys.geology);
@@ -233,9 +237,8 @@ async function runAnalysis() {
     });
     if (ctrl.signal.aborted) return;
     state.result = result;
-    heat.update(result, { threshold: state.threshold });
+    drawHeat();
     $('map-legend').hidden = false;
-    updateStatus();
     if (result.status.errors.length) console.warn('Datenquellen mit Problemen:', result.status.errors);
     if (result.status.forest !== 'ok') toast('Waldlayer konnte nicht ausgewertet werden – die roten Flächen berücksichtigen Wald und Baumarten nicht.', { type: 'error', ms: 7000 });
     if (state.selected) inspectPoint(L.latLng(state.selected.lat, state.selected.lon), { silent: true });
@@ -250,16 +253,30 @@ async function runAnalysis() {
   }
 }
 
-function updateStatus() {
+/** Wählt die Schwelle für den aktuellen Ausschnitt, zeichnet das Overlay und aktualisiert den Text. */
+function drawHeat() {
   const r = state.result;
   if (!r) return;
-  const n = r.scores.length;
-  let hits = 0; let top = 0;
-  for (let k = 0; k < n; k++) { if (r.scores[k] >= state.threshold) hits++; if (r.scores[k] >= 0.8) top++; }
+  state.heatInfo = selectThreshold(r.scores, { topFraction: state.topFraction, minScore: CONFIG.heat.minScore });
+  heat.update(r, { threshold: state.heatInfo.threshold });
+  updateStatus();
+}
+
+function updateStatus() {
+  const r = state.result;
+  const info = state.heatInfo;
+  if (!r || !info) return;
   const sp = getSpecies(state.speciesId);
-  const pct = (hits / n) * 100;
-  const pctText = hits === 0 ? 'keine Zelle' : pct < 1 ? 'unter 1 % der Fläche' : `${Math.round(pct)} % der Fläche`;
-  statusText.textContent = `${sp.name}: ${r.grid.cols}×${r.grid.rows} Zellen à ca. ${Math.round(r.grid.cellM)} m · ${pctText} rot markiert (Score ≥ ${state.threshold.toFixed(2)}), davon ${Math.round((top / n) * 100)} % sehr hoch.`;
+  const pct = info.fraction * 100;
+  const flaeche = info.marked === 0
+    ? 'nichts markiert – im Ausschnitt erreicht keine Zelle hohes Potenzial'
+    : `${pct < 1 ? 'unter 1' : Math.round(pct)} % der Fläche markiert (${info.marked} von ${info.total} Zellen, Score ab ${info.threshold.toFixed(2)})`;
+  const grund = info.marked === 0 ? ''
+    : info.limitedBy === 'relativ'
+      ? ` · begrenzt auf die besten ${Math.round(state.topFraction * 100)} %`
+      : ' · begrenzt durch die Untergrenze «hohes Potenzial»';
+  statusText.textContent = `${sp.name}: ${r.grid.cols}×${r.grid.rows} Zellen à ca. ${Math.round(r.grid.cellM)} m · ${flaeche}${grund}.`;
+
   const list = $('source-status');
   clear(list);
   const item = (ok, text) => el('li', {}, [el('span', { class: ok === 'ok' ? 'ok' : ok === 'aus' ? 'off' : 'fail', text: ok === 'ok' ? '✓' : ok === 'aus' ? '○' : '✗' }), el('span', { text })]);
@@ -301,7 +318,8 @@ async function inspectPoint(latlng, { silent = false } = {}) {
   }
   const r = scoreCell(species, cell, state.month);
   state.selected = { lat, lon, cell, result: r, partial };
-  renderInspector(box, { lat, lon, cell, result: r, species, month: state.month, partial });
+  const marked = state.heatInfo ? r.score >= state.heatInfo.threshold : r.score >= CONFIG.heat.minScore;
+  renderInspector(box, { lat, lon, cell, result: r, species, month: state.month, partial, marked });
   $('btn-save-spot').disabled = false;
   const route = $('link-google-route'); route.href = googleMapsRouteUrl(lat, lon); route.hidden = false;
   const show = $('link-google-show'); show.href = googleMapsShowUrl(lat, lon); show.hidden = false;

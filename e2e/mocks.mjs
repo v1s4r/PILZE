@@ -85,6 +85,30 @@ export const SEARCH_SIEBNEN = [
   { origin: 'gazetteer', rank: 6, label: '<b>Siebnen-Wangen</b> (SZ) - Wangen (SZ)', detail: 'siebnen-wangen', objectclass: 'TLM_HALTESTELLE', lat: 47.18, lon: 8.89, zoomlevel: 9 },
   { origin: 'address', rank: 7, label: 'Siebnerstrasse 12 <b>8854 Siebnen</b>', detail: 'siebnerstrasse 12 8854 siebnen', lat: 47.175, lon: 8.897, zoomlevel: 10 },
 ];
+/**
+ * Weitere Orte mit der typischen Falle: die PLZ-/Gemeinde-Koordinate liegt weit weg vom Dorfkern,
+ * weil sie nur ein «Punkt auf der Fläche» ist. Erwartet wird jeweils der ORT-Eintrag.
+ */
+export const SEARCH_ORTE = {
+  siebnen: { ort: { lat: 47.1745, lon: 8.8965 }, weit: { lat: 47.142, lon: 8.93 } },
+  zermatt: { ort: { lat: 46.0207, lon: 7.7491 }, weit: { lat: 45.9760, lon: 7.7050 } },
+  davos: { ort: { lat: 46.8043, lon: 9.8370 }, weit: { lat: 46.7300, lon: 9.9200 } },
+  einsiedeln: { ort: { lat: 47.1284, lon: 8.7450 }, weit: { lat: 47.0850, lon: 8.8100 } },
+  saas: { ort: { lat: 46.1088, lon: 7.9290 }, weit: { lat: 46.0600, lon: 7.9800 } },
+};
+
+/** Baut für einen Ortsnamen die typische Dienst-Antwort (PLZ + Gemeinde weit weg, Ortschaft richtig). */
+export function ortAntwort(name, key) {
+  const o = SEARCH_ORTE[key];
+  const gross = name[0].toUpperCase() + name.slice(1);
+  return [
+    { origin: 'zipcode', rank: 1, label: `<b>1234 - ${gross}</b>`, detail: '1234', lat: o.weit.lat, lon: o.weit.lon, zoomlevel: -1 },
+    { origin: 'gg25', rank: 2, label: `<b>${gross} (XX)</b>`, detail: `${key} xx`, lat: o.weit.lat + 0.01, lon: o.weit.lon + 0.01, zoomlevel: -1 },
+    { origin: 'gazetteer', rank: 5, label: `<b>${gross}</b> (XX) - ${gross}`, detail: key, objectclass: 'TLM_SIEDLUNGSNAME', lat: o.ort.lat, lon: o.ort.lon, zoomlevel: 9 },
+    { origin: 'address', rank: 7, label: `Dorfstrasse 1 <b>1234 ${gross}</b>`, detail: `dorfstrasse 1234 ${key}`, lat: o.ort.lat + 0.002, lon: o.ort.lon + 0.002, zoomlevel: 10 },
+  ];
+}
+
 export const SEARCH_LUZERN = [
   { origin: 'zipcode', rank: 1, label: '<b>6003 - Luzern</b>', detail: '6003', lat: 47.04, lon: 8.30, zoomlevel: -1 },
   { origin: 'gg25', rank: 2, label: '<b>Luzern (LU)</b>', detail: 'luzern lu', lat: 47.06, lon: 8.32, zoomlevel: -1 },
@@ -121,7 +145,12 @@ export async function installMocks(page, counters = {}) {
     const u = new URL(route.request().url());
     const text = (u.searchParams.get('searchText') || '').toLowerCase();
     const origins = (u.searchParams.get('origins') || 'zipcode,gg25,district,kantone,gazetteer,address').split(',');
-    const all = text.startsWith('sieb') ? SEARCH_SIEBNEN : SEARCH_LUZERN;
+    let all = SEARCH_LUZERN;
+    if (text.startsWith('sieb')) all = SEARCH_SIEBNEN;
+    else {
+      const key = Object.keys(SEARCH_ORTE).find((k) => k.startsWith(text.slice(0, 4)) || text.startsWith(k.slice(0, 4)));
+      if (key) all = ortAntwort(key, key);
+    }
     // Dienst-Verhalten: nach rank aufsteigend sortiert, nach origins gefiltert
     const results = all
       .filter((a) => origins.includes(a.origin))

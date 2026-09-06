@@ -26,7 +26,7 @@ export function renderInspector(container, data) {
 
   container.append(el('div', { class: 'row' }, [
     el('span', { class: 'score-badge', text: `${cls.label} · ${Math.round(result.score * 100)}`, style: { background: cls.color === 'transparent' ? 'var(--muted)' : cls.color } }),
-    el('span', { class: 'muted small', text: result.score >= 0.65 ? 'auf der Karte rot markiert' : 'nicht markiert' }),
+    el('span', { class: 'muted small', text: data.marked ? 'auf der Karte rot markiert' : 'nicht rot markiert' }),
     el('span', { class: 'muted small', text: species.combine ? `beste Art: ${shownSpecies.name}` : shownSpecies.name }),
   ]));
   if (season.state === 'aus' || season.state === 'rand') {

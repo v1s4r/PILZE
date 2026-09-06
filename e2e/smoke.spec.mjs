@@ -23,17 +23,19 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
 
     await page.screenshot({ path: 'e2e/screenshots/karte.png' });
     const status = await page.locator('#status-text').textContent();
-    expect(status).toMatch(/rot markiert \(Score ≥ 0\.65\)/);
-    // Standard-Schwelle = hohes Potenzial; keine Zelle darunter wird gezeichnet
+    expect(status).toMatch(/markiert/);
     const drawn = await page.evaluate(() => {
       const st = window.__pilzkarte.state;
-      let below = 0; let shown = 0;
-      for (const v of st.result.scores) { if (v >= st.threshold) shown++; else if (v >= 0.3) below++; }
-      return { threshold: st.threshold, shown, below };
+      let aboveFloor = 0;
+      for (const v of st.result.scores) if (v >= 0.65) aboveFloor++;
+      return { info: st.heatInfo, aboveFloor, total: st.result.scores.length };
     });
-    expect(drawn.threshold).toBe(0.65);
-    expect(drawn.shown).toBeGreaterThan(0);
-    expect(drawn.below).toBeGreaterThan(0); // es gäbe mittleres Potenzial – es wird bewusst nicht markiert
+    // höchstens die eingestellten 10 %, und nie unter der Untergrenze
+    expect(drawn.info.fraction).toBeLessThanOrEqual(0.101);
+    expect(drawn.info.threshold).toBeGreaterThanOrEqual(0.65);
+    expect(drawn.info.marked).toBeGreaterThan(0);
+    // im Testgelände gäbe es viel mehr Zellen über der Untergrenze – sie bleiben bewusst unmarkiert
+    expect(drawn.aboveFloor).toBeGreaterThan(drawn.info.marked * 2);
     await expect(page.locator('#map-legend')).toContainText('hohes Potenzial');
     await expect(page.locator('#map-legend')).not.toContainText('gering');
 
@@ -46,8 +48,7 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
       const d = ctx.getImageData(0, 0, c.width, c.height).data;
       let red = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 40 && d[i] > 100) red++;
       const st = window.__pilzkarte.state;
-      let shown = 0; for (const v of st.result.scores) if (v >= st.threshold) shown++;
-      return { red, shownCells: shown, perCell: 64 };
+      return { red, shownCells: st.heatInfo.marked, perCell: 64 };
     });
     expect(px.red).toBeGreaterThan(50);
     // Glättung verwischt Ränder, aber die Fläche darf nicht deutlich über die markierten Zellen hinauswachsen

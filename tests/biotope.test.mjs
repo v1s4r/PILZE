@@ -25,15 +25,15 @@ test('trapezoid', () => {
   assert.equal(trapezoid(NaN, [300, 600, 1400, 1900]), 0);
 });
 
-test('Standard-Anzeigeschwelle entspricht der Klasse «hoch»', async () => {
+test('Absolute Untergrenze entspricht der Klasse «hoch»', async () => {
   const { CONFIG } = await import('../js/config.js');
-  assert.equal(CONFIG.heat.threshold, 0.65);
-  assert.equal(classify(CONFIG.heat.threshold).key, 'hoch');
-  assert.equal(classify(CONFIG.heat.threshold - 0.01).key, 'mittel');
-  // alles unterhalb der Schwelle bleibt unmarkiert
+  assert.equal(CONFIG.heat.minScore, 0.65);
+  assert.equal(classify(CONFIG.heat.minScore).key, 'hoch');
+  assert.equal(classify(CONFIG.heat.minScore - 0.01).key, 'mittel');
+  // mittleres und geringes Potenzial liegen immer unter der Untergrenze
   for (const k of ['mittel', 'gering', 'kein']) {
     const c = CLASSES.find((x) => x.key === k);
-    assert.ok(c.min < CONFIG.heat.threshold, `${k} läge über der Schwelle`);
+    assert.ok(c.min < CONFIG.heat.minScore, `${k} läge über der Untergrenze`);
   }
 });
 
@@ -45,7 +45,7 @@ test('idealer Steinpilz-Standort erreicht hohes Potenzial', () => {
 
 test('Kalibrierung: gute Standorte werden markiert, mangelhafte nicht', async () => {
   const { CONFIG } = await import('../js/config.js');
-  const T = CONFIG.heat.threshold;
+  const T = CONFIG.heat.minScore;
   const base = { elev: 1000, slope: 12, aspect: 20, forestFrac: 0.95, decid: 0.4, soil: 0.3 };
   // guter Standort: jeder Teilfaktor 70–90 → muss rot werden
   const gut = scoreCell(steinpilz, { ...base, decid: 0.55, soil: 0.5 }, 9);
