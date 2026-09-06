@@ -8,7 +8,8 @@
   <title>Pilzkarte Schweiz</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍄%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="css/style.css">
+  <meta name="app-version" content="__BUILD__">
+  <link rel="stylesheet" href="css/style.css?v=__BUILD__">
 </head>
 <body>
   <header id="topbar">
@@ -26,9 +27,8 @@
       <div id="map" role="application" aria-label="Karte"></div>
       <button id="fab-analyze" type="button" class="fab">🍄 Hier analysieren</button>
       <div id="map-legend" class="map-legend" hidden>
-        <span class="swatch s1"></span><span>gering</span>
-        <span class="swatch s2"></span><span>mittel</span>
-        <span class="swatch s3"></span><span>hoch</span>
+        <span class="swatch s2"></span><span>hohes Potenzial</span>
+        <span class="swatch s3"></span><span>sehr hoch</span>
       </div>
     </div>
 
@@ -63,8 +63,8 @@
         <h2>Legende</h2>
         <div class="legend">
           <div class="legend-bar"></div>
-          <div class="legend-labels"><span>geringes Potenzial</span><span>mittel</span><span>hoch</span></div>
-          <p class="muted">Rote Flächen zeigen, wo Wald, Baumarten, Höhenlage, Bodensäure, Exposition und Hangneigung zum Biotop-Profil der gewählten Art passen. Es ist ein Modell: «Hier könnten die Bedingungen passen» – nicht «hier hat jemand Pilze gefunden».</p>
+          <div class="legend-labels"><span>hohes Potenzial (ab 65)</span><span>sehr hoch (ab 80)</span></div>
+          <p class="muted">Rot markiert sind nur Wälder mit <strong>hohem Potenzial</strong>: Wald, Baumarten, Höhenlage, Bodensäure, Exposition und Hangneigung passen zusammen zum Biotop-Profil der gewählten Art. Mittleres und geringes Potenzial bleibt unmarkiert. Es ist ein Modell: «Hier könnten die Bedingungen passen» – nicht «hier hat jemand Pilze gefunden».</p>
         </div>
         <ul id="source-status" class="sources"></ul>
 
@@ -74,8 +74,9 @@
             <input id="opacity" type="range" min="0.2" max="1" step="0.05">
           </label>
           <label>Anzeigeschwelle (Score) <span id="threshold-value"></span>
-            <input id="threshold" type="range" min="0.15" max="0.7" step="0.05">
+            <input id="threshold" type="range" min="0.45" max="0.85" step="0.05">
           </label>
+          <p class="muted small">Standard 0.65 = nur hohes Potenzial. Tiefer zeigt auch mittleres Potenzial, höher nur die besten Zellen.</p>
           <label class="check"><input id="include-soil" type="checkbox" checked> Geologie/Bodensäure abfragen (langsamer)</label>
           <div class="row">
             <button id="btn-clear-cache" type="button">Zwischenspeicher leeren</button>
@@ -107,7 +108,6 @@
         </div>
         <div class="row small">
           <a id="link-google-show" href="#" target="_blank" rel="noopener" hidden>In Google Maps anzeigen ↗</a>
-          <a id="link-geoadmin" href="#" target="_blank" rel="noopener" hidden>Auf map.geo.admin.ch öffnen ↗</a>
         </div>
         <p id="nav-hint" class="muted small" hidden>Google Maps führt dich bis zur nächsten befahrbaren Strasse; von dort geht es zu Fuss weiter. Auf dem Handy öffnet sich direkt die Google-Maps-App.</p>
       </section>
@@ -160,6 +160,7 @@
         </ul>
         <h2>Datenquellen</h2>
         <p class="small">Geodaten: © swisstopo, BAFU, WSL (geo.admin.ch, Open Government Data). Wetter: Open-Meteo.com (CC BY 4.0). Karte: Leaflet.</p>
+        <p class="small muted">Version <span id="app-version">–</span> · Zeigt der Browser eine alte Version, hilft Neuladen mit Strg+Shift+R (Handy: Seite schliessen und neu öffnen).</p>
       </section>
     </aside>
   </main>
@@ -167,6 +168,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=__BUILD__"></script>
 </body>
 </html>

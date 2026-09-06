@@ -46,7 +46,7 @@ export const CONFIG = {
 
   // Heat-Overlay (rote Flächen)
   heat: {
-    threshold: 0.3,   // ab diesem Score wird eine Zelle sichtbar
+    threshold: 0.65,  // ab diesem Score wird eine Zelle rot – entspricht der Klasse «hohes Potenzial»
     opacity: 0.75,
     upscale: 8,       // Glättung: Zellen werden hochskaliert und bilinear interpoliert
   },
@@ -58,7 +58,7 @@ export const CONFIG = {
   },
 
   storageKeys: {
-    settings: 'pilzkarte.settings.v1',
+    settings: 'pilzkarte.settings.v2',
     spots: 'pilzkarte.spots.v1',
     geology: 'pilzkarte.geology.v2',
     weather: 'pilzkarte.weather.v1',

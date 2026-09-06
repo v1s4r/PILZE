@@ -254,10 +254,12 @@ function updateStatus() {
   const r = state.result;
   if (!r) return;
   const n = r.scores.length;
-  let hits = 0; let hoch = 0;
-  for (let k = 0; k < n; k++) { if (r.scores[k] >= state.threshold) hits++; if (r.scores[k] >= 0.65) hoch++; }
+  let hits = 0; let top = 0;
+  for (let k = 0; k < n; k++) { if (r.scores[k] >= state.threshold) hits++; if (r.scores[k] >= 0.8) top++; }
   const sp = getSpecies(state.speciesId);
-  statusText.textContent = `${sp.name}: ${r.grid.cols}×${r.grid.rows} Zellen à ca. ${Math.round(r.grid.cellM)} m · ${Math.round((hits / n) * 100)} % der Fläche mit Potenzial, ${Math.round((hoch / n) * 100)} % hoch.`;
+  const pct = (hits / n) * 100;
+  const pctText = hits === 0 ? 'keine Zelle' : pct < 1 ? 'unter 1 % der Fläche' : `${Math.round(pct)} % der Fläche`;
+  statusText.textContent = `${sp.name}: ${r.grid.cols}×${r.grid.rows} Zellen à ca. ${Math.round(r.grid.cellM)} m · ${pctText} rot markiert (Score ≥ ${state.threshold.toFixed(2)}), davon ${Math.round((top / n) * 100)} % sehr hoch.`;
   const list = $('source-status');
   clear(list);
   const item = (ok, text) => el('li', {}, [el('span', { class: ok === 'ok' ? 'ok' : ok === 'aus' ? 'off' : 'fail', text: ok === 'ok' ? '✓' : ok === 'aus' ? '○' : '✗' }), el('span', { text })]);
@@ -301,10 +303,6 @@ async function inspectPoint(latlng, { silent = false } = {}) {
   state.selected = { lat, lon, cell, result: r, partial };
   renderInspector(box, { lat, lon, cell, result: r, species, month: state.month, partial });
   $('btn-save-spot').disabled = false;
-  const p = toLv95Int(lat, lon);
-  const link = $('link-geoadmin');
-  link.href = `https://map.geo.admin.ch/#/map?lang=de&center=${p.E},${p.N}&z=9&bgLayer=ch.swisstopo.pixelkarte-farbe&layers=${CONFIG.layers.forestMix}`;
-  link.hidden = false;
   const route = $('link-google-route'); route.href = googleMapsRouteUrl(lat, lon); route.hidden = false;
   const show = $('link-google-show'); show.href = googleMapsShowUrl(lat, lon); show.hidden = false;
   $('nav-hint').hidden = false;
@@ -480,6 +478,13 @@ $('file-import-spots').addEventListener('change', async (e) => {
   } catch (err) { toast(`Import fehlgeschlagen: ${err.message || err}`, { type: 'error' }); }
   e.target.value = '';
 });
+
+// ---------- Version ----------
+{
+  const meta = document.querySelector('meta[name="app-version"]');
+  const v = meta && meta.content && !meta.content.startsWith('__') ? meta.content : 'lokal';
+  $('app-version').textContent = v;
+}
 
 // ---------- Start ----------
 renderSpeciesChips();

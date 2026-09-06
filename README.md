@@ -11,7 +11,7 @@ komplett im Browser.
 
 - **Biotop-Analyse** des sichtbaren Kartenausschnitts (ab Zoomstufe 11), automatisch nach jeder Kartenbewegung oder per Knopf.
 - **12 Pilzarten** mit eigenem Biotop-Profil (Steinpilz, Eierschwämmli, Maronenröhrling, Trompetenpfifferling, Herbsttrompete, Semmelstoppelpilz, Hexenröhrling, Fichtenreizker, Birkenpilz/Rotkappe, Krause Glucke, Morcheln, Parasol) plus «Alle Speisepilze», das je Zelle die im gewählten Monat passendste Art zeigt.
-- **Rote Flächen** (drei Stufen: gering / mittel / hoch) als geglättetes Overlay über der Landeskarte oder dem Luftbild.
+- **Rote Flächen** nur für Wald mit **hohem Potenzial** (Score ≥ 0.65) als geglättetes Overlay über der Landeskarte oder dem Luftbild; mittleres und geringes Potenzial bleibt unmarkiert. Die Schwelle lässt sich in den Einstellungen verschieben.
 - **Standort-Check**: Klick auf die Karte zeigt Höhe, Hangneigung, Exposition, Waldanteil, Laub-/Nadelholzanteil, Gestein/Bodensäure und den Beitrag jedes Faktors.
 - **Pilzwetter / Regen-Timing**: Niederschlag und Temperaturen der letzten 30 Tage plus 7 Tage Prognose, daraus ein täglicher Pilz-Index mit Erklärung («Letzter ergiebiger Regen vor 9 Tagen … nächste günstige Phase ab Do»).
 - **Ortssuche** (Ortschaften, Gemeinden, PLZ, Flurnamen, Adressen) mit Typ-Kennzeichnung und Pfeiltasten-Bedienung, **GPS-Standort**, **eigene Plätze** speichern (lokal im Browser, Export/Import als JSON).
@@ -32,8 +32,18 @@ bestimmt und mit dem Profil der gewählten Art verglichen (`js/model/species.js`
 | Bodensäure | Geotechnische Karte GK500 (Gesteinsklassierung, Lithologie) via Identify | Kalk/Mergel → basisch, Granit/Gneis/Silikat → sauer; Index 0–1 |
 | Regen-Timing | Open-Meteo (ICON-CH von MeteoSchweiz) | Bodenfeuchte-Bilanz + Fruchtungsfenster 5–21 Tage nach ergiebigem Regen, Temperatur-/Frost-/Saison-Tore |
 
-Score = Wald × Baumarten¹·⁰ × Höhe¹·⁰ × Boden⁰·⁷ × Exposition⁰·⁵ × Neigung⁰·⁴ (`js/model/biotope.js`).
-Wald und Höhe wirken als Ausschlusskriterien, die übrigen Faktoren verfeinern. Fehlt eine Datenquelle
+Rohwert = Wald × Baumarten¹·⁰ × Höhe¹·⁰ × Boden⁰·⁷ × Exposition⁰·⁵ × Neigung⁰·⁴ (`js/model/biotope.js`).
+Wald und Höhe wirken als Ausschlusskriterien, die übrigen Faktoren verfeinern.
+
+Das Produkt sechs kleiner Faktoren fällt zwangsläufig tief aus: ein Platz mit Wald 100, Baumarten 85, Höhe 100,
+Boden 75, Exposition 93 und Neigung 100 käme roh nur auf 0.67 – die Klasse «hoch» wäre kaum erreichbar. Der
+Rohwert wird deshalb mit `SCORE_GAMMA` (0.5, also die Wurzel) auf die Skala gehoben, welche die Klassen
+annehmen. Die Transformation ist streng monoton, die Rangfolge der Zellen bleibt also exakt gleich. Geprüft an
+Referenzfällen: guter Standort (alle Teilfaktoren 70–90) → «hoch»; falsche Höhenlage oder falsche Baumart →
+«mittel».
+
+Rot gezeichnet werden nur Zellen ab Score 0.65 («hohes Potenzial», ab 0.80 dunkler als «sehr hoch»); mittleres
+und geringes Potenzial bleibt unmarkiert. Fehlt eine Datenquelle
 (z. B. Geologie ausserhalb der Schweiz), geht sie neutral ein und wird im Panel als «nicht verfügbar» angezeigt.
 
 Alle Modellparameter (Höhenbereiche, Baumpartner, Säure-Präferenz, Regen-Verzögerung, Temperaturfenster) sind
@@ -63,6 +73,12 @@ Die App besteht nur aus statischen Dateien (ES-Module), braucht aber einen HTTP-
 npm start            # python3 -m http.server 8080  → http://localhost:8080
 # oder: npx serve .
 ```
+
+### Cache und Version
+
+GitHub Pages liefert Dateien mit zehn Minuten Cache aus. Der Workflow ersetzt beim Deploy den Platzhalter
+`__BUILD__` in `index.html` durch den Commit-Hash, sodass CSS und JavaScript bei jeder Version neu geladen
+werden; die laufende Version steht unten im Tab «Info».
 
 ### Als Website veröffentlichen
 

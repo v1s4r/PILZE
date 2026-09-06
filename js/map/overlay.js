@@ -2,15 +2,15 @@
 
 import { CONFIG } from '../config.js';
 
-const LIGHT = [240, 87, 92];   // Score an der Schwelle
-const DARK = [140, 8, 18];     // Score 1.0
+const LIGHT = [220, 45, 55];   // Score an der Schwelle: bereits deutlich rot
+const DARK = [130, 6, 16];     // Score 1.0: dunkelrot
 
 export function scoreColor(s, threshold) {
   const t = Math.max(0, Math.min(1, (s - threshold) / (1 - threshold)));
   const r = Math.round(LIGHT[0] + (DARK[0] - LIGHT[0]) * t);
   const g = Math.round(LIGHT[1] + (DARK[1] - LIGHT[1]) * t);
   const b = Math.round(LIGHT[2] + (DARK[2] - LIGHT[2]) * t);
-  const a = Math.round(255 * (0.35 + 0.6 * t));
+  const a = Math.round(255 * (0.6 + 0.35 * t));
   return [r, g, b, a];
 }
 

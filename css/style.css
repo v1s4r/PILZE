@@ -130,9 +130,8 @@ button { cursor: pointer; }
   background: var(--surface); border-radius: 8px; box-shadow: var(--shadow); color: var(--text-2);
 }
 .map-legend .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
-.swatch.s1 { background: rgba(240, 87, 92, 0.55); }
-.swatch.s2 { background: rgba(200, 40, 50, 0.75); }
-.swatch.s3 { background: rgba(140, 8, 18, 0.95); }
+.swatch.s2 { background: rgba(220, 45, 55, 0.75); }
+.swatch.s3 { background: rgba(130, 6, 16, 0.95); }
 
 /* Panel */
 #panel {
@@ -185,7 +184,7 @@ button:not(.primary):not(.chip):not(.icon-btn):not(.fab):not(.tabs button) {
 .sources .fail { color: var(--bad); }
 .sources .off { color: var(--muted); }
 
-.legend-bar { height: 12px; border-radius: 6px; background: linear-gradient(90deg, rgba(240,87,92,0.45), rgba(200,40,50,0.8), rgba(140,8,18,1)); }
+.legend-bar { height: 12px; border-radius: 6px; background: linear-gradient(90deg, rgba(220,45,55,0.7), rgba(130,6,16,1)); }
 .legend-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
 
 .settings summary { cursor: pointer; font-weight: 600; color: var(--text-2); margin: 14px 0 6px; }

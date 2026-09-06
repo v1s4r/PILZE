@@ -23,20 +23,35 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
 
     await page.screenshot({ path: 'e2e/screenshots/karte.png' });
     const status = await page.locator('#status-text').textContent();
-    const pct = Number(/(\d+) % der Fläche/.exec(status)[1]);
-    expect(pct).toBeGreaterThan(5);
+    expect(status).toMatch(/rot markiert \(Score ≥ 0\.65\)/);
+    // Standard-Schwelle = hohes Potenzial; keine Zelle darunter wird gezeichnet
+    const drawn = await page.evaluate(() => {
+      const st = window.__pilzkarte.state;
+      let below = 0; let shown = 0;
+      for (const v of st.result.scores) { if (v >= st.threshold) shown++; else if (v >= 0.3) below++; }
+      return { threshold: st.threshold, shown, below };
+    });
+    expect(drawn.threshold).toBe(0.65);
+    expect(drawn.shown).toBeGreaterThan(0);
+    expect(drawn.below).toBeGreaterThan(0); // es gäbe mittleres Potenzial – es wird bewusst nicht markiert
+    await expect(page.locator('#map-legend')).toContainText('hohes Potenzial');
+    await expect(page.locator('#map-legend')).not.toContainText('gering');
 
     // Overlay enthält rote Pixel
-    const hasRed = await page.evaluate(async () => {
+    const px = await page.evaluate(async () => {
       const img = document.querySelector('img.heat-overlay');
       await img.decode();
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
       const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
       const d = ctx.getImageData(0, 0, c.width, c.height).data;
       let red = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 40 && d[i] > 100) red++;
-      return red > 50;
+      const st = window.__pilzkarte.state;
+      let shown = 0; for (const v of st.result.scores) if (v >= st.threshold) shown++;
+      return { red, shownCells: shown, perCell: 64 };
     });
-    expect(hasRed).toBe(true);
+    expect(px.red).toBeGreaterThan(50);
+    // Glättung verwischt Ränder, aber die Fläche darf nicht deutlich über die markierten Zellen hinauswachsen
+    expect(px.red).toBeLessThan(px.shownCells * px.perCell * 2.5);
 
     // Artwechsel bewertet neu ohne Nachladen
     await page.locator('#species-list .chip', { hasText: 'Eierschwämmli' }).click();
@@ -79,6 +94,7 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
     await expect(page.locator('#link-google-route')).toHaveAttribute('href', /^https:\/\/www\.google\.com\/maps\/dir\/\?api=1&destination=47\.\d+%2C8\.\d+&travelmode=driving$/);
     await expect(page.locator('#link-google-show')).toHaveAttribute('href', /maps\/search\/\?api=1&query=47\./);
     await expect(page.locator('#nav-hint')).toBeVisible();
+    await expect(page.locator('#link-geoadmin')).toHaveCount(0); // map.geo.admin.ch-Link ersetzt
     await page.locator('.tabs [data-tab="plaetze"]').click();
     await expect(page.locator('#spots-list a.btn-nav')).toHaveCount(1);
     await expect(page.locator('#spots-list a.btn-nav')).toHaveAttribute('href', /maps\/dir\/\?api=1&destination=/);

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SPECIES, SPECIES_BY_ID, COMBINED, getSpecies, seasonLeader } from '../js/model/species.js';
 import {
-  scoreCell, classify, trapezoid, treeFactor, forestFactor, aspectFactor, soilIndexFromRockText, aspectLabel, seasonFactor, seasonInfo,
+  scoreCell, classify, CLASSES, trapezoid, treeFactor, forestFactor, aspectFactor, soilIndexFromRockText, aspectLabel, seasonFactor, seasonInfo,
 } from '../js/model/biotope.js';
 
 const steinpilz = SPECIES_BY_ID.steinpilz;
@@ -25,10 +25,57 @@ test('trapezoid', () => {
   assert.equal(trapezoid(NaN, [300, 600, 1400, 1900]), 0);
 });
 
+test('Standard-Anzeigeschwelle entspricht der Klasse «hoch»', async () => {
+  const { CONFIG } = await import('../js/config.js');
+  assert.equal(CONFIG.heat.threshold, 0.65);
+  assert.equal(classify(CONFIG.heat.threshold).key, 'hoch');
+  assert.equal(classify(CONFIG.heat.threshold - 0.01).key, 'mittel');
+  // alles unterhalb der Schwelle bleibt unmarkiert
+  for (const k of ['mittel', 'gering', 'kein']) {
+    const c = CLASSES.find((x) => x.key === k);
+    assert.ok(c.min < CONFIG.heat.threshold, `${k} läge über der Schwelle`);
+  }
+});
+
 test('idealer Steinpilz-Standort erreicht hohes Potenzial', () => {
   const r = scoreCell(steinpilz, good, 9);
   assert.ok(r.score >= 0.65, `score=${r.score}`);
-  assert.equal(classify(r.score).key, 'hoch');
+  assert.ok(['hoch', 'sehr-hoch'].includes(classify(r.score).key), classify(r.score).key);
+});
+
+test('Kalibrierung: gute Standorte werden markiert, mangelhafte nicht', async () => {
+  const { CONFIG } = await import('../js/config.js');
+  const T = CONFIG.heat.threshold;
+  const base = { elev: 1000, slope: 12, aspect: 20, forestFrac: 0.95, decid: 0.4, soil: 0.3 };
+  // guter Standort: jeder Teilfaktor 70–90 → muss rot werden
+  const gut = scoreCell(steinpilz, { ...base, decid: 0.55, soil: 0.5 }, 9);
+  assert.ok(gut.score >= T, `guter Standort nicht markiert: ${gut.score}`);
+  // mangelhafte Standorte dürfen nicht rot werden
+  for (const [name, art, cell] of [
+    ['falsche Höhe', steinpilz, { ...base, elev: 2100 }],
+    ['kaum Wald', steinpilz, { ...base, forestFrac: 0.15 }],
+    // Der Steinpilz nimmt Nadel- wie Laubwald; für «falsche Baumart» braucht es eine
+    // nadelholzgebundene Art im reinen Laubwald.
+    ['falsche Baumart', SPECIES_BY_ID.maronen, { ...base, decid: 1 }],
+  ]) {
+    const r = scoreCell(art, cell, 9);
+    assert.ok(r.score < T, `${name} wäre markiert worden: ${r.score}`);
+  }
+  // dieselbe Zelle ist für den Steinpilz sehr wohl geeignet (Buche/Eiche sind Partner)
+  assert.ok(scoreCell(steinpilz, { ...base, decid: 1 }, 9).score >= T);
+});
+
+test('Kalibrierung ändert die Rangfolge nicht (streng monoton)', () => {
+  const cells = [
+    { elev: 1000, slope: 12, aspect: 20, forestFrac: 0.95, decid: 0.4, soil: 0.3 },
+    { elev: 700, slope: 25, aspect: 180, forestFrac: 0.6, decid: 0.8, soil: 0.6 },
+    { elev: 1600, slope: 5, aspect: 90, forestFrac: 0.4, decid: 0.1, soil: 0.9 },
+    { elev: 400, slope: 35, aspect: 270, forestFrac: 0.8, decid: 0.5, soil: 0.15 },
+  ];
+  const scored = cells.map((c) => scoreCell(steinpilz, c, 9));
+  const byRaw = [...scored].sort((a, b) => b.rawScore - a.rawScore).map((r) => r.rawScore);
+  const byScore = [...scored].sort((a, b) => b.score - a.score).map((r) => r.rawScore);
+  assert.deepEqual(byScore, byRaw);
 });
 
 test('ohne Wald kein Potenzial', () => {
@@ -39,7 +86,9 @@ test('ohne Wald kein Potenzial', () => {
 
 test('Höhe ausserhalb des Bereichs drückt den Score stark', () => {
   const r = scoreCell(steinpilz, { ...good, elev: 2400 }, 9);
-  assert.ok(r.score < 0.1, `score=${r.score}`);
+  const ideal = scoreCell(steinpilz, good, 9);
+  assert.ok(r.score < ideal.score / 3, `score=${r.score} vs ideal=${ideal.score}`);
+  assert.equal(classify(r.score).key, 'kein');
 });
 
 test('Kalkboden ist für Eierschwämmli schlechter als saurer Boden', () => {
