@@ -68,7 +68,7 @@ test.describe('Mastertest', () => {
     // Einstellungen aufklappen: alle Regler vorhanden
     await page.locator('.tabs [data-tab="karte"]').click();
     await aufklappen(page, 'details.settings');
-    for (const s of ['#opacity', '#top-fraction', '#include-soil', '#btn-clear-cache']) {
+    for (const s of ['#opacity', '#mark-from', '#include-soil', '#btn-clear-cache']) {
       await expect(page.locator(s)).toBeVisible();
     }
 
@@ -155,29 +155,61 @@ test.describe('Mastertest', () => {
     expect(errors, errors.join('\n')).toEqual([]);
   });
 
-  test('D – nur die besten Wälder werden rot markiert', async ({ page }) => {
+  test('D – Etikett und rote Markierung widersprechen sich nie', async ({ page }) => {
     const errors = collectErrors(page);
     await installMocks(page);
     await page.goto('/#13/47.05000/8.30000/steinpilz');
     await analyseFertig(page);
 
-    const f = await page.evaluate(() => {
+    // Der gemeldete Praxisfehler: eine Zelle mit «sehr hohem Potenzial» blieb unmarkiert.
+    // Für JEDE Zelle muss gelten: markiert genau dann, wenn die Klasse die Schwelle erreicht.
+    const pruefung = await page.evaluate(() => {
       const st = window.__pilzkarte.state;
-      const s = st.result.scores;
-      let ueberGrenze = 0, mittel = 0;
-      for (const v of s) { if (v >= 0.65) ueberGrenze++; else if (v >= 0.45) mittel++; }
-      return { info: st.heatInfo, ueberGrenze, mittel, total: s.length, top: st.topFraction };
+      const { scores } = st.result;
+      const t = st.heatInfo.threshold;
+      let markiert = 0, sehrHoch = 0, sehrHochUnmarkiert = 0, hochUnmarkiert = 0, widerspruch = 0;
+      for (const v of scores) {
+        const m = v >= t;
+        if (m) markiert++;
+        if (v >= 0.6) { sehrHoch++; if (!m) sehrHochUnmarkiert++; }
+        if (v >= 0.45 && v < 0.6 && !m) hochUnmarkiert++;
+        if (v < 0.45 && m) widerspruch++;
+      }
+      return { markiert, sehrHoch, sehrHochUnmarkiert, hochUnmarkiert, widerspruch, info: st.heatInfo };
     });
-    // Regel 1: höchstens der eingestellte Anteil
-    expect(f.info.fraction).toBeLessThanOrEqual(f.top + 0.005);
-    // Regel 2: nie unter «hohes Potenzial»
-    expect(f.info.threshold).toBeGreaterThanOrEqual(0.65);
-    // Regel 3: mittleres Potenzial existiert, wird aber nicht markiert
-    expect(f.mittel).toBeGreaterThan(0);
-    // Regel 4: deutlich weniger als «alles über der Untergrenze»
-    expect(f.info.marked).toBeLessThan(f.ueberGrenze);
+    expect(pruefung.sehrHoch).toBeGreaterThan(0);
+    expect(pruefung.sehrHochUnmarkiert, 'Zelle mit «sehr hohem Potenzial» blieb unmarkiert').toBe(0);
+    expect(pruefung.hochUnmarkiert, 'Zelle mit «hohem Potenzial» blieb unmarkiert').toBe(0);
+    expect(pruefung.widerspruch, 'Zelle unter der Schwelle wurde markiert').toBe(0);
 
-    // Gezeichnete Pixel decken sich mit der Zahl markierter Zellen
+    // Auch im Standort-Check: der angezeigte Text stimmt mit der Klasse überein
+    const box = await page.locator('#map').boundingBox();
+    for (const [fx, fy] of [[0.3, 0.5], [0.6, 0.3], [0.8, 0.7], [0.15, 0.2]]) {
+      await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+      await expect(page.locator('#inspector .score-badge')).toBeVisible();
+      const text = await page.locator('#inspector').textContent();
+      const klasse = /(Sehr hohes|Hohes|Mittleres|Geringes|Kein) Potenzial/.exec(text)[1];
+      const markiert = text.includes('auf der Karte rot markiert');
+      const sollte = klasse === 'Sehr hohes' || klasse === 'Hohes';
+      expect(markiert, `«${klasse} Potenzial» → markiert=${markiert}`).toBe(sollte);
+    }
+
+    // Strengere Einstellung markiert weniger, grosszügigere mehr
+    // (der Klick auf die Karte hat auf den Tab «Punkt» gewechselt – Einstellungen sind im Tab «Karte»)
+    await page.locator('.tabs [data-tab="karte"]').click();
+    await aufklappen(page, 'details.settings');
+    const zahl = () => page.evaluate(() => window.__pilzkarte.state.heatInfo.marked);
+    const normal = await zahl();
+    await page.locator('#mark-from').selectOption('sehr-hoch');
+    expect(await zahl()).toBeLessThan(normal);
+    await page.locator('#mark-from').selectOption('mittel');
+    // Im synthetischen Gelände liegt keine Zelle im Band 0.30–0.45, deshalb nicht zwingend mehr.
+    // Die strikte Ordnung prüft tests/heat.test.mjs an einer gleichverteilten Reihe.
+    expect(await zahl()).toBeGreaterThanOrEqual(normal);
+    await page.locator('#mark-from').selectOption('hoch');
+    expect(await zahl()).toBe(normal);
+
+    // Gezeichnete Pixel decken sich mit den markierten Zellen
     const px = await page.evaluate(async () => {
       const img = document.querySelector('img.heat-overlay');
       await img.decode();
@@ -187,28 +219,9 @@ test.describe('Mastertest', () => {
       let rot = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 40) rot++;
       return { rot, gesamt: c.width * c.height };
     });
-    expect(px.rot).toBeGreaterThan(0);
-    expect(px.rot / px.gesamt).toBeLessThan(f.top * 2.5); // Glättung verbreitert die Ränder etwas
-
-    // Regler wirkt: weniger Anteil → weniger markierte Zellen
-    const vorher = f.info.marked;
-    await aufklappen(page, 'details.settings');
-    await page.locator('#top-fraction').fill('3');
-    await page.locator('#top-fraction').dispatchEvent('change');
-    const nachher = await page.evaluate(() => window.__pilzkarte.state.heatInfo.marked);
-    expect(nachher).toBeLessThan(vorher);
-
-    // Jede markierte Zelle erreicht im Standort-Check mindestens «hohes Potenzial»
-    const stichprobe = await page.evaluate(() => {
-      const st = window.__pilzkarte.state;
-      const out = [];
-      for (let k = 0; k < st.result.scores.length && out.length < 20; k++) {
-        if (st.result.scores[k] >= st.heatInfo.threshold) out.push(st.result.scores[k]);
-      }
-      return out;
-    });
-    expect(stichprobe.length).toBeGreaterThan(0);
-    for (const v of stichprobe) expect(v).toBeGreaterThanOrEqual(0.65);
+    const anteilZellen = pruefung.markiert / pruefung.info.total;
+    expect(px.rot / px.gesamt).toBeGreaterThan(anteilZellen * 0.4);
+    expect(px.rot / px.gesamt).toBeLessThan(anteilZellen * 2.5 + 0.05);
     expect(errors, errors.join('\n')).toEqual([]);
   });
 

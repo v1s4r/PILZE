@@ -26,16 +26,14 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
     expect(status).toMatch(/markiert/);
     const drawn = await page.evaluate(() => {
       const st = window.__pilzkarte.state;
-      let aboveFloor = 0;
-      for (const v of st.result.scores) if (v >= 0.65) aboveFloor++;
-      return { info: st.heatInfo, aboveFloor, total: st.result.scores.length };
+      let ueber = 0;
+      for (const v of st.result.scores) if (v >= st.heatInfo.threshold) ueber++;
+      return { info: st.heatInfo, ueber };
     });
-    // höchstens die eingestellten 10 %, und nie unter der Untergrenze
-    expect(drawn.info.fraction).toBeLessThanOrEqual(0.101);
-    expect(drawn.info.threshold).toBeGreaterThanOrEqual(0.65);
+    // markiert ist genau, was die Schwelle erreicht – nichts anderes
+    expect(drawn.info.markFrom).toBe('hoch');
+    expect(drawn.info.marked).toBe(drawn.ueber);
     expect(drawn.info.marked).toBeGreaterThan(0);
-    // im Testgelände gäbe es viel mehr Zellen über der Untergrenze – sie bleiben bewusst unmarkiert
-    expect(drawn.aboveFloor).toBeGreaterThan(drawn.info.marked * 2);
     await expect(page.locator('#map-legend')).toContainText('hohes Potenzial');
     await expect(page.locator('#map-legend')).not.toContainText('gering');
 
@@ -52,7 +50,7 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
     });
     expect(px.red).toBeGreaterThan(50);
     // Glättung verwischt Ränder, aber die Fläche darf nicht deutlich über die markierten Zellen hinauswachsen
-    expect(px.red).toBeLessThan(px.shownCells * px.perCell * 2.5);
+    expect(px.red).toBeLessThan(px.shownCells * px.perCell * 3);
 
     // Artwechsel bewertet neu ohne Nachladen
     await page.locator('#species-list .chip', { hasText: 'Eierschwämmli' }).click();

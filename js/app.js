@@ -3,7 +3,7 @@
 import { CONFIG, wmtsUrl } from './config.js';
 import { SPECIES, COMBINED, getSpecies, seasonLeader } from './model/species.js';
 import { scoreCell, classify, seasonInfo } from './model/biotope.js';
-import { selectThreshold } from './model/heat.js';
+import { heatInfo, isMarked, MARK_OPTIONS } from './model/heat.js';
 import { computeRainTiming, describeTiming, indexLabel } from './model/rain.js';
 import { buildGrid, analyze, rescore, cellAt, cellIndexAt } from './analysis/grid.js';
 import { soilAt } from './analysis/geology.js';
@@ -27,7 +27,7 @@ const state = {
   auto: true,
   includeSoil: true,
   opacity: CONFIG.heat.opacity,
-  topFraction: CONFIG.heat.topFraction,
+  markFrom: CONFIG.heat.markFrom,
   heatInfo: null,
   result: null,
   analyzing: null,
@@ -45,13 +45,13 @@ function loadSettings() {
     if (typeof s.auto === 'boolean') state.auto = s.auto;
     if (typeof s.includeSoil === 'boolean') state.includeSoil = s.includeSoil;
     if (Number.isFinite(s.opacity)) state.opacity = s.opacity;
-    if (Number.isFinite(s.topFraction)) state.topFraction = s.topFraction;
+    if (MARK_OPTIONS.includes(s.markFrom)) state.markFrom = s.markFrom;
   } catch (_) { /* ignore */ }
 }
 function saveSettings() {
   try {
-    const { speciesId, auto, includeSoil, opacity, topFraction } = state;
-    localStorage.setItem(CONFIG.storageKeys.settings, JSON.stringify({ speciesId, auto, includeSoil, opacity, topFraction }));
+    const { speciesId, auto, includeSoil, opacity, markFrom } = state;
+    localStorage.setItem(CONFIG.storageKeys.settings, JSON.stringify({ speciesId, auto, includeSoil, opacity, markFrom }));
   } catch (_) { /* ignore */ }
 }
 
@@ -186,15 +186,11 @@ $('auto-analyze').addEventListener('change', (e) => { state.auto = e.target.chec
 $('include-soil').checked = state.includeSoil;
 $('include-soil').addEventListener('change', (e) => { state.includeSoil = e.target.checked; saveSettings(); });
 const opacityInput = $('opacity'); opacityInput.value = String(state.opacity);
-const topInput = $('top-fraction'); topInput.value = String(Math.round(state.topFraction * 100));
-const showSliderValues = () => {
-  $('opacity-value').textContent = `${Math.round(state.opacity * 100)} %`;
-  $('top-fraction-value').textContent = `beste ${Math.round(state.topFraction * 100)} %`;
-};
+const markInput = $('mark-from'); markInput.value = state.markFrom;
+const showSliderValues = () => { $('opacity-value').textContent = `${Math.round(state.opacity * 100)} %`; };
 showSliderValues();
 opacityInput.addEventListener('input', () => { state.opacity = Number(opacityInput.value); heat.setOpacity(state.opacity); showSliderValues(); saveSettings(); });
-topInput.addEventListener('change', () => { state.topFraction = Number(topInput.value) / 100; showSliderValues(); saveSettings(); drawHeat(); });
-topInput.addEventListener('input', () => { state.topFraction = Number(topInput.value) / 100; showSliderValues(); });
+markInput.addEventListener('change', () => { state.markFrom = markInput.value; saveSettings(); drawHeat(); });
 $('btn-clear-cache').addEventListener('click', () => {
   try {
     localStorage.removeItem(CONFIG.storageKeys.geology);
@@ -257,7 +253,7 @@ async function runAnalysis() {
 function drawHeat() {
   const r = state.result;
   if (!r) return;
-  state.heatInfo = selectThreshold(r.scores, { topFraction: state.topFraction, minScore: CONFIG.heat.minScore });
+  state.heatInfo = heatInfo(r.scores, state.markFrom);
   heat.update(r, { threshold: state.heatInfo.threshold });
   updateStatus();
 }
@@ -269,13 +265,9 @@ function updateStatus() {
   const sp = getSpecies(state.speciesId);
   const pct = info.fraction * 100;
   const flaeche = info.marked === 0
-    ? 'nichts markiert – im Ausschnitt erreicht keine Zelle hohes Potenzial'
-    : `${pct < 1 ? 'unter 1' : Math.round(pct)} % der Fläche markiert (${info.marked} von ${info.total} Zellen, Score ab ${info.threshold.toFixed(2)})`;
-  const grund = info.marked === 0 ? ''
-    : info.limitedBy === 'relativ'
-      ? ` · begrenzt auf die besten ${Math.round(state.topFraction * 100)} %`
-      : ' · begrenzt durch die Untergrenze «hohes Potenzial»';
-  statusText.textContent = `${sp.name}: ${r.grid.cols}×${r.grid.rows} Zellen à ca. ${Math.round(r.grid.cellM)} m · ${flaeche}${grund}.`;
+    ? `nichts markiert – im Ausschnitt erreicht keine Zelle «${info.label.toLowerCase()}»`
+    : `${pct < 1 ? 'unter 1' : Math.round(pct)} % der Fläche markiert (${info.marked} von ${info.total} Zellen)`;
+  statusText.textContent = `${sp.name}: ${r.grid.cols}×${r.grid.rows} Zellen à ca. ${Math.round(r.grid.cellM)} m · ${flaeche} · markiert ab ${info.label} (Score ${info.threshold.toFixed(2)}).`;
 
   const list = $('source-status');
   clear(list);
@@ -318,8 +310,7 @@ async function inspectPoint(latlng, { silent = false } = {}) {
   }
   const r = scoreCell(species, cell, state.month);
   state.selected = { lat, lon, cell, result: r, partial };
-  const marked = state.heatInfo ? r.score >= state.heatInfo.threshold : r.score >= CONFIG.heat.minScore;
-  renderInspector(box, { lat, lon, cell, result: r, species, month: state.month, partial, marked });
+  renderInspector(box, { lat, lon, cell, result: r, species, month: state.month, partial, marked: isMarked(r.score, state.markFrom) });
   $('btn-save-spot').disabled = false;
   const route = $('link-google-route'); route.href = googleMapsRouteUrl(lat, lon); route.hidden = false;
   const show = $('link-google-show'); show.href = googleMapsShowUrl(lat, lon); show.hidden = false;

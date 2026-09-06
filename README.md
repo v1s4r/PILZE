@@ -11,7 +11,7 @@ komplett im Browser.
 
 - **Biotop-Analyse** des sichtbaren Kartenausschnitts (ab Zoomstufe 11), automatisch nach jeder Kartenbewegung oder per Knopf.
 - **12 Pilzarten** mit eigenem Biotop-Profil (Steinpilz, Eierschwämmli, Maronenröhrling, Trompetenpfifferling, Herbsttrompete, Semmelstoppelpilz, Hexenröhrling, Fichtenreizker, Birkenpilz/Rotkappe, Krause Glucke, Morcheln, Parasol) plus «Alle Speisepilze», das je Zelle die im gewählten Monat passendste Art zeigt.
-- **Rote Flächen** nur für die **besten Wälder im Ausschnitt**: markiert wird, was zu den besten 10 % der Fläche gehört *und* mindestens «hohes Potenzial» erreicht. In schwachen Gebieten bleibt die Karte leer. Der Anteil ist in den Einstellungen einstellbar (2–30 %).
+- **Rote Flächen** genau für das, was der Standort-Check als **hohes** oder **sehr hohes Potenzial** ausweist. Etikett und Markierung sind dieselbe Regel und können nicht auseinanderlaufen. In den Einstellungen umstellbar auf streng (nur sehr hoch) oder grosszügig (ab mittel).
 - **Standort-Check**: Klick auf die Karte zeigt Höhe, Hangneigung, Exposition, Waldanteil, Laub-/Nadelholzanteil, Gestein/Bodensäure und den Beitrag jedes Faktors.
 - **Pilzwetter / Regen-Timing**: Niederschlag und Temperaturen der letzten 30 Tage plus 7 Tage Prognose, daraus ein täglicher Pilz-Index mit Erklärung («Letzter ergiebiger Regen vor 9 Tagen … nächste günstige Phase ab Do»).
 - **Ortssuche** (Ortschaften, Gemeinden, PLZ, Flurnamen, Adressen) mit Typ-Kennzeichnung und Pfeiltasten-Bedienung, **GPS-Standort**, **eigene Plätze** speichern (lokal im Browser, Export/Import als JSON).
@@ -42,16 +42,28 @@ annehmen. Die Transformation ist streng monoton, die Rangfolge der Zellen bleibt
 Referenzfällen: guter Standort (alle Teilfaktoren 70–90) → «hoch»; falsche Höhenlage oder falsche Baumart →
 «mittel».
 
-**Welche Zellen rot werden** (`js/model/heat.js`): In einem typischen Waldgebiet liegen fast alle Waldzellen in
-einem schmalen Punkteband – eine feste Schwelle markiert deshalb entweder beinahe den ganzen Wald oder gar
-nichts. Markiert wird darum, was **beide** Bedingungen erfüllt:
+**Welche Zellen rot werden** (`js/model/heat.js`): Markiert wird genau dann, wenn die Zelle mindestens die
+eingestellte Klasse erreicht (Standard «hohes Potenzial»). Damit sind das Etikett im Standort-Check und die
+rote Fläche auf der Karte **dieselbe Aussage**.
 
-1. **relativ** – die Zelle gehört zu den besten `topFraction` des Ausschnitts (Standard 10 %),
-2. **absolut** – die Zelle erreicht mindestens Score 0.65 («hohes Potenzial»).
+> Eine frühere Fassung begrenzte zusätzlich auf die «besten x % im Ausschnitt». Das führte zum Widerspruch,
+> dass eine Zelle mit «sehr hohem Potenzial» unmarkiert blieb, weil andere Zellen noch besser waren – zwei
+> Massstäbe für dieselbe Frage. Entfernt; `tests/heat.test.mjs` sichert die Regel über den ganzen
+> Wertebereich ab, der Mastertest zusätzlich über jede Zelle einer echten Analyse.
 
-So ist die rote Fläche nach oben begrenzt, und in einem schwachen Gebiet bleibt die Karte leer, statt die
-«besten der schlechten» zu markieren. Die Statuszeile nennt jeweils die effektiv verwendete Schwelle und
-welche der beiden Bedingungen gebunden hat. Fehlt eine Datenquelle
+Die Klassengrenzen sind an Referenzfällen geeicht. Der Score ist ein Produkt aus sechs Teilfaktoren und liegt
+deshalb naturgemäss tiefer als die Einzelwerte:
+
+| Standort | Score | Klasse |
+|---|---|---|
+| alle Teilfaktoren 100 | 1.00 | sehr hoch |
+| Wald 100, Bäume 85, Höhe 100, Boden 75, Exposition 92, Neigung 100 | 0.67 | sehr hoch |
+| alle Teilfaktoren 90 | 0.62 | sehr hoch |
+| alle Teilfaktoren 80 | 0.36 | mittel |
+| falsche Höhenlage (Höhe 40) | 0.28 | gering |
+| falsche Baumart (Bäume 35) | 0.28 | gering |
+
+Fehlt eine Datenquelle
 (z. B. Geologie ausserhalb der Schweiz), geht sie neutral ein und wird im Panel als «nicht verfügbar» angezeigt.
 
 Alle Modellparameter (Höhenbereiche, Baumpartner, Säure-Präferenz, Regen-Verzögerung, Temperaturfenster) sind
@@ -116,7 +128,7 @@ Internetverbindung und ohne Last für die Bundes-Dienste.
 | A | Alle Ansichten erscheinen vollständig, keine Konsolen- oder Netzwerkfehler |
 | B | Höhen: gesendete LV95-Koordinate stimmt mit der Referenz, Rasterhöhen plausibel |
 | C | Suche: fünf Orte landen im Dorfkern statt auf dem PLZ-Flächenpunkt |
-| D | Nur die besten Wälder sind rot; Regler wirkt; gezeichnete Pixel passen zu den Zellen |
+| D | Etikett und Markierung widersprechen sich in keiner Zelle; Einstellung wirkt; Pixel passen zu den Zellen |
 | E | Alle 13 Arten × 12 Monate liefern gültige Werte |
 | F | Plätze speichern, überleben Neuladen, Google-Maps-Ziel stimmt, löschen |
 | G | Ausfall einer Datenquelle wird gemeldet, die App läuft weiter |

@@ -15,7 +15,7 @@ export function scoreColor(s, threshold) {
 }
 
 /** Erzeugt ein geglättetes Canvas (cols*upscale x rows*upscale) aus den Zell-Scores. */
-export function renderHeatCanvas(result, { threshold = CONFIG.heat.minScore, upscale = CONFIG.heat.upscale } = {}) {
+export function renderHeatCanvas(result, { threshold, upscale = CONFIG.heat.upscale } = {}) {
   const { cols, rows } = result.grid;
   const small = document.createElement('canvas');
   small.width = cols; small.height = rows;

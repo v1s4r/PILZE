@@ -7,22 +7,6 @@ import { SPECIES_BY_ID } from './species.js';
 
 export const WEIGHTS = { trees: 1.0, elevation: 1.0, soil: 0.7, aspect: 0.5, slope: 0.4 };
 
-/**
- * Kalibrierung der Punkteskala.
- *
- * Der Score ist ein Produkt von sechs Teilfaktoren – das bestraft jeden schwachen Faktor hart,
- * drückt aber auch sehr gute Standorte nach unten: ein Platz mit Wald 100, Baumarten 85,
- * Höhe 100, Boden 75, Exposition 93 und Neigung 100 käme roh nur auf 0.67. Damit wäre die
- * Klasse «hoch» (ab 0.65) praktisch unerreichbar und die Karte bliebe leer.
- *
- * Deshalb wird das Produkt mit diesem Exponenten auf die Skala gehoben, welche die Klassen
- * annehmen. Die Transformation ist streng monoton: die Rangfolge der Zellen bleibt exakt
- * gleich, nur die Zahlen liegen dort, wo die Bezeichnungen sie erwarten. Geprüft an
- * Referenzfällen: guter Standort (alle Faktoren 70–90) → «hoch»; falsche Höhenlage oder
- * falsche Baumart → «mittel», also nicht rot markiert.
- */
-export const SCORE_GAMMA = 0.5;
-
 export const UNKNOWN = { forest: 0.6, trees: 0.7, soil: 0.75, elevation: 0.5 };
 
 export function clamp(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
@@ -171,27 +155,47 @@ export function scoreCell(species, cell, month) {
     aspect: aspectFactor(species, cell.aspect, cell.slope, month),
     slope: slopeFactor(species, cell.slope),
   };
-  const rawScore = f.forest *
+  const score = clamp(f.forest *
     Math.pow(f.trees, WEIGHTS.trees) *
     Math.pow(f.elevation, WEIGHTS.elevation) *
     Math.pow(f.soil, WEIGHTS.soil) *
     Math.pow(f.aspect, WEIGHTS.aspect) *
-    Math.pow(f.slope, WEIGHTS.slope);
-  const score = clamp(Math.pow(clamp(rawScore, 0, 1), SCORE_GAMMA), 0, 1);
+    Math.pow(f.slope, WEIGHTS.slope), 0, 1);
   // Bei einer einzeln gewählten Art fliesst die Saison NICHT in den Score ein: die Karte zeigt das
   // Standort-Potenzial, damit man Plätze auch ausserhalb der Saison suchen kann. Die UI weist auf
   // die Saison hin, und der Pilz-Index im Tab «Pilzwetter» berücksichtigt sie.
-  return { score, rawScore, factors: f, speciesId: species.id, biotopeScore: score, season: seasonFactor(species, month) };
+  return { score, factors: f, speciesId: species.id, biotopeScore: score, season: seasonFactor(species, month) };
 }
 
-// Nur die beiden obersten Klassen werden auf der Karte rot markiert (Schwelle CONFIG.heat.threshold).
+/**
+ * Klassen, absteigend. Die Grenzen sind an Referenzfällen geeicht – der Score ist ein Produkt
+ * aus sechs Teilfaktoren und liegt deshalb naturgemäss tiefer als die Einzelwerte:
+ *
+ *   alle Teilfaktoren 100          → 1.00   sehr hoch
+ *   alle Teilfaktoren  90          → 0.62   sehr hoch
+ *   Wald 100 / Bäume 85 / Höhe 100 / Boden 75 / Exposition 92 / Neigung 100 → 0.67  sehr hoch
+ *   alle Teilfaktoren  80          → 0.36   mittel
+ *   falsche Höhenlage (Höhe 40)    → 0.28   gering
+ *   falsche Baumart (Bäume 35)     → 0.28   gering
+ *
+ * WICHTIG: Auf der Karte markiert wird genau dann, wenn die Klasse mindestens
+ * CONFIG.heat.markFrom erreicht. Etikett im Standort-Check und rote Fläche sind damit
+ * dieselbe Aussage – sie können nicht auseinanderlaufen.
+ */
 export const CLASSES = [
-  { min: 0.8, key: 'sehr-hoch', label: 'Sehr hohes Potenzial', color: '#82060f' },
-  { min: 0.65, key: 'hoch', label: 'Hohes Potenzial', color: '#b3121b' },
-  { min: 0.45, key: 'mittel', label: 'Mittleres Potenzial', color: '#c98500' },
-  { min: 0.3, key: 'gering', label: 'Geringes Potenzial', color: '#8a8780' },
+  { min: 0.6, key: 'sehr-hoch', label: 'Sehr hohes Potenzial', color: '#82060f' },
+  { min: 0.45, key: 'hoch', label: 'Hohes Potenzial', color: '#b3121b' },
+  { min: 0.3, key: 'mittel', label: 'Mittleres Potenzial', color: '#c98500' },
+  { min: 0.15, key: 'gering', label: 'Geringes Potenzial', color: '#8a8780' },
   { min: 0, key: 'kein', label: 'Kein Potenzial', color: 'transparent' },
 ];
+
+/** Score, ab dem eine Klasse beginnt. */
+export function classMin(key) {
+  const c = CLASSES.find((x) => x.key === key);
+  if (!c) throw new Error(`Unbekannte Klasse: ${key}`);
+  return c.min;
+}
 
 export function classify(score) {
   return CLASSES.find((c) => score >= c.min) || CLASSES[CLASSES.length - 1];

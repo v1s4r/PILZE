@@ -25,16 +25,12 @@ test('trapezoid', () => {
   assert.equal(trapezoid(NaN, [300, 600, 1400, 1900]), 0);
 });
 
-test('Absolute Untergrenze entspricht der Klasse «hoch»', async () => {
-  const { CONFIG } = await import('../js/config.js');
-  assert.equal(CONFIG.heat.minScore, 0.65);
-  assert.equal(classify(CONFIG.heat.minScore).key, 'hoch');
-  assert.equal(classify(CONFIG.heat.minScore - 0.01).key, 'mittel');
-  // mittleres und geringes Potenzial liegen immer unter der Untergrenze
-  for (const k of ['mittel', 'gering', 'kein']) {
-    const c = CLASSES.find((x) => x.key === k);
-    assert.ok(c.min < CONFIG.heat.minScore, `${k} läge über der Untergrenze`);
+test('Klassen sind lückenlos und absteigend geordnet', () => {
+  for (let i = 1; i < CLASSES.length; i++) {
+    assert.ok(CLASSES[i].min < CLASSES[i - 1].min, `${CLASSES[i].key} nicht kleiner als ${CLASSES[i - 1].key}`);
   }
+  assert.equal(CLASSES[CLASSES.length - 1].min, 0);
+  for (const c of CLASSES) assert.equal(classify(c.min).key, c.key);
 });
 
 test('idealer Steinpilz-Standort erreicht hohes Potenzial', () => {
@@ -43,9 +39,9 @@ test('idealer Steinpilz-Standort erreicht hohes Potenzial', () => {
   assert.ok(['hoch', 'sehr-hoch'].includes(classify(r.score).key), classify(r.score).key);
 });
 
-test('Kalibrierung: gute Standorte werden markiert, mangelhafte nicht', async () => {
-  const { CONFIG } = await import('../js/config.js');
-  const T = CONFIG.heat.minScore;
+test('Eichung: gute Standorte werden markiert, mangelhafte nicht', async () => {
+  const { classMin } = await import('../js/model/biotope.js');
+  const T = classMin('hoch');
   const base = { elev: 1000, slope: 12, aspect: 20, forestFrac: 0.95, decid: 0.4, soil: 0.3 };
   // guter Standort: jeder Teilfaktor 70–90 → muss rot werden
   const gut = scoreCell(steinpilz, { ...base, decid: 0.55, soil: 0.5 }, 9);
@@ -65,17 +61,13 @@ test('Kalibrierung: gute Standorte werden markiert, mangelhafte nicht', async ()
   assert.ok(scoreCell(steinpilz, { ...base, decid: 1 }, 9).score >= T);
 });
 
-test('Kalibrierung ändert die Rangfolge nicht (streng monoton)', () => {
-  const cells = [
-    { elev: 1000, slope: 12, aspect: 20, forestFrac: 0.95, decid: 0.4, soil: 0.3 },
-    { elev: 700, slope: 25, aspect: 180, forestFrac: 0.6, decid: 0.8, soil: 0.6 },
-    { elev: 1600, slope: 5, aspect: 90, forestFrac: 0.4, decid: 0.1, soil: 0.9 },
-    { elev: 400, slope: 35, aspect: 270, forestFrac: 0.8, decid: 0.5, soil: 0.15 },
-  ];
-  const scored = cells.map((c) => scoreCell(steinpilz, c, 9));
-  const byRaw = [...scored].sort((a, b) => b.rawScore - a.rawScore).map((r) => r.rawScore);
-  const byScore = [...scored].sort((a, b) => b.score - a.score).map((r) => r.rawScore);
-  assert.deepEqual(byScore, byRaw);
+test('Score ist das reine Produkt der Teilfaktoren (keine Nachbearbeitung)', () => {
+  const cell = { elev: 900, slope: 11, aspect: 32, forestFrac: 1, decid: 0, soil: 0.3 };
+  const r = scoreCell(steinpilz, cell, 9);
+  const f = r.factors;
+  const erwartet = f.forest * f.trees * f.elevation
+    * Math.pow(f.soil, 0.7) * Math.pow(f.aspect, 0.5) * Math.pow(f.slope, 0.4);
+  assert.ok(Math.abs(r.score - erwartet) < 1e-12, `${r.score} vs ${erwartet}`);
 });
 
 test('ohne Wald kein Potenzial', () => {

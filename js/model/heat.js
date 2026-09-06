@@ -1,42 +1,44 @@
 // Bestimmt, welche Zellen rot markiert werden.
 //
-// Warum nicht einfach eine feste Punkte-Schwelle? In einem typischen Schweizer Waldgebiet liegen
-// fast alle Waldzellen in einem schmalen Punkteband – eine feste Schwelle markiert deshalb
-// entweder beinahe den ganzen Wald oder gar nichts. Für die Suche nach guten Plätzen ist aber
-// genau die Spitze interessant.
+// GRUNDREGEL: Markiert wird genau dann, wenn die Zelle mindestens die eingestellte Klasse
+// erreicht. Das Etikett im Standort-Check und die rote Fläche auf der Karte sind damit
+// dieselbe Aussage und können nicht auseinanderlaufen.
 //
-// Deshalb zwei Bedingungen, die beide erfüllt sein müssen:
-//   1. relativ  – die Zelle gehört zu den besten `topFraction` des Ausschnitts
-//   2. absolut  – die Zelle erreicht mindestens `minScore` («hohes Potenzial»)
-//
-// Damit ist die markierte Fläche nach oben begrenzt (nie mehr als topFraction), und in einem
-// schwachen Gebiet bleibt die Karte leer, statt die «besten der schlechten» zu markieren.
+// (Frühere Fassung begrenzte zusätzlich auf die «besten x % im Ausschnitt». Das führte zum
+// Widerspruch, dass eine Zelle mit «sehr hohem Potenzial» unmarkiert blieb, weil andere Zellen
+// im Ausschnitt noch besser waren. Zwei Massstäbe für dieselbe Frage – deshalb entfernt.)
 
-/** Quantil eines Zahlenfelds (q = 0.9 → Wert, den 90 % unterschreiten). */
-export function quantile(values, q) {
-  const arr = Array.from(values).filter(Number.isFinite).sort((a, b) => a - b);
-  if (arr.length === 0) return 0;
-  const pos = (arr.length - 1) * Math.min(1, Math.max(0, q));
-  const lo = Math.floor(pos); const hi = Math.ceil(pos);
-  return lo === hi ? arr[lo] : arr[lo] + (arr[hi] - arr[lo]) * (pos - lo);
+import { CLASSES, classMin } from './biotope.js';
+
+/** Klassen, die als Markierungsgrenze wählbar sind – von streng nach grosszügig. */
+export const MARK_OPTIONS = ['sehr-hoch', 'hoch', 'mittel'];
+
+export function isMarkOption(key) {
+  return MARK_OPTIONS.includes(key);
 }
 
 /**
  * @param {ArrayLike<number>} scores
- * @param {{topFraction:number, minScore:number}} opts
- * @returns {{threshold:number, marked:number, total:number, fraction:number, limitedBy:'relativ'|'absolut'}}
+ * @param {string} markFrom Klassenschlüssel, ab dem markiert wird
+ * @returns {{threshold:number, markFrom:string, label:string, marked:number, total:number, fraction:number}}
  */
-export function selectThreshold(scores, { topFraction, minScore }) {
+export function heatInfo(scores, markFrom) {
+  const key = isMarkOption(markFrom) ? markFrom : 'hoch';
+  const threshold = classMin(key);
   const total = scores.length;
-  const relative = quantile(scores, 1 - topFraction);
-  const threshold = Math.max(minScore, relative);
   let marked = 0;
   for (let i = 0; i < total; i++) if (scores[i] >= threshold) marked++;
   return {
     threshold,
+    markFrom: key,
+    label: CLASSES.find((c) => c.key === key).label,
     marked,
     total,
     fraction: total ? marked / total : 0,
-    limitedBy: threshold > relative ? 'absolut' : 'relativ',
   };
+}
+
+/** Wird diese Zelle markiert? Einzige Wahrheitsquelle für Karte und Standort-Check. */
+export function isMarked(score, markFrom) {
+  return Number.isFinite(score) && score >= classMin(isMarkOption(markFrom) ? markFrom : 'hoch');
 }

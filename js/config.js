@@ -44,11 +44,10 @@ export const CONFIG = {
   swissBounds: { south: 45.7, west: 5.8, north: 47.9, east: 10.6 },
   defaultView: { lat: 46.95, lon: 8.1, zoom: 8 },
 
-  // Heat-Overlay (rote Flächen). Markiert wird, was BEIDES erfüllt: zu den besten `topFraction`
-  // des Ausschnitts gehören UND mindestens `minScore` erreichen (Klasse «hohes Potenzial»).
+  // Heat-Overlay (rote Flächen). Markiert wird, was mindestens diese Klasse erreicht – dieselbe
+  // Aussage wie das Etikett im Standort-Check.
   heat: {
-    topFraction: 0.1, // höchstens die besten 10 % der Fläche im Ausschnitt
-    minScore: 0.65,   // absolute Untergrenze: darunter bleibt es leer, auch wenn nichts Besseres da ist
+    markFrom: 'hoch', // 'sehr-hoch' | 'hoch' | 'mittel'
     opacity: 0.75,
     upscale: 8,       // Glättung: Zellen werden hochskaliert und bilinear interpoliert
   },
@@ -60,7 +59,7 @@ export const CONFIG = {
   },
 
   storageKeys: {
-    settings: 'pilzkarte.settings.v3',
+    settings: 'pilzkarte.settings.v4',
     spots: 'pilzkarte.spots.v1',
     geology: 'pilzkarte.geology.v2',
     weather: 'pilzkarte.weather.v1',

@@ -63,8 +63,8 @@
         <h2>Legende</h2>
         <div class="legend">
           <div class="legend-bar"></div>
-          <div class="legend-labels"><span>hohes Potenzial (ab 65)</span><span>sehr hoch (ab 80)</span></div>
-          <p class="muted">Rot markiert sind nur die <strong>besten Wälder im Ausschnitt</strong> – standardmässig höchstens die besten 10 % der Fläche, und nur wenn sie mindestens «hohes Potenzial» erreichen. Mittleres und geringes Potenzial bleibt unmarkiert; in schwachen Gebieten bleibt die Karte leer. Es ist ein Modell: «Hier könnten die Bedingungen passen» – nicht «hier hat jemand Pilze gefunden».</p>
+          <div class="legend-labels"><span>hohes Potenzial (ab 45)</span><span>sehr hoch (ab 60)</span></div>
+          <p class="muted">Rot markiert ist genau das, was der Standort-Check als <strong>hohes</strong> oder <strong>sehr hohes Potenzial</strong> ausweist – Wald, Baumarten, Höhenlage, Bodensäure, Exposition und Hangneigung passen zusammen zum Biotop-Profil der Art. Mittleres und geringes Potenzial bleibt unmarkiert. Es ist ein Modell: «Hier könnten die Bedingungen passen» – nicht «hier hat jemand Pilze gefunden».</p>
         </div>
         <ul id="source-status" class="sources"></ul>
 
@@ -73,10 +73,14 @@
           <label>Deckkraft der roten Flächen <span id="opacity-value"></span>
             <input id="opacity" type="range" min="0.2" max="1" step="0.05">
           </label>
-          <label>Markierte Fläche <span id="top-fraction-value"></span>
-            <input id="top-fraction" type="range" min="2" max="30" step="1">
+          <label>Rot markieren ab
+            <select id="mark-from">
+              <option value="sehr-hoch">sehr hohem Potenzial (streng)</option>
+              <option value="hoch">hohem Potenzial (Standard)</option>
+              <option value="mittel">mittlerem Potenzial (grosszügig)</option>
+            </select>
           </label>
-          <p class="muted small">Markiert werden die besten Zellen des Ausschnitts – höchstens dieser Anteil und nie unter «hohes Potenzial» (Score 0.65). In schwachen Gebieten bleibt die Karte deshalb leer.</p>
+          <p class="muted small">Bestimmt zugleich, was der Standort-Check als «rot markiert» meldet – beide Angaben können nicht auseinanderlaufen.</p>
           <label class="check"><input id="include-soil" type="checkbox" checked> Geologie/Bodensäure abfragen (langsamer)</label>
           <div class="row">
             <button id="btn-clear-cache" type="button">Zwischenspeicher leeren</button>
