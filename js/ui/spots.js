@@ -2,6 +2,7 @@
 
 import { CONFIG } from '../config.js';
 import { el, clear } from './dom.js';
+import { googleMapsRouteUrl } from '../model/places.js';
 
 export function loadSpots() {
   try {
@@ -48,6 +49,7 @@ export function renderSpots(container, spots, handlers) {
       el('span', { text: '🍄', 'aria-hidden': 'true' }),
       el('div', { class: 'name' }, [el('span', { text: s.name }), el('small', { text: meta }), s.note ? el('small', { text: s.note }) : null]),
       el('button', { type: 'button', text: 'Zeigen', onclick: () => handlers.onGoto(s) }),
+      el('a', { class: 'btn btn-nav', href: googleMapsRouteUrl(s.lat, s.lon), target: '_blank', rel: 'noopener', title: 'Route mit Google Maps', 'aria-label': `Route zu ${s.name} mit Google Maps`, text: '🧭' }),
       el('button', { type: 'button', text: '✕', title: 'Löschen', 'aria-label': `${s.name} löschen`, onclick: () => handlers.onDelete(s) }),
     ]));
   }

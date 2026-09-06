@@ -14,7 +14,8 @@ komplett im Browser.
 - **Rote Flächen** (drei Stufen: gering / mittel / hoch) als geglättetes Overlay über der Landeskarte oder dem Luftbild.
 - **Standort-Check**: Klick auf die Karte zeigt Höhe, Hangneigung, Exposition, Waldanteil, Laub-/Nadelholzanteil, Gestein/Bodensäure und den Beitrag jedes Faktors.
 - **Pilzwetter / Regen-Timing**: Niederschlag und Temperaturen der letzten 30 Tage plus 7 Tage Prognose, daraus ein täglicher Pilz-Index mit Erklärung («Letzter ergiebiger Regen vor 9 Tagen … nächste günstige Phase ab Do»).
-- **Ortssuche** (Gemeinden, Flurnamen, Adressen), **GPS-Standort**, **eigene Plätze** speichern (lokal im Browser, Export/Import als JSON).
+- **Ortssuche** (Ortschaften, Gemeinden, PLZ, Flurnamen, Adressen) mit Typ-Kennzeichnung und Pfeiltasten-Bedienung, **GPS-Standort**, **eigene Plätze** speichern (lokal im Browser, Export/Import als JSON).
+- **Google-Maps-Navigation** zu jedem Punkt und jedem gespeicherten Platz: ein Klick öffnet die Route (auf dem Handy direkt in der Google-Maps-App) bis zur nächsten befahrbaren Strasse.
 - Zusätzliche Karten-Layer zum Nachprüfen: Waldmischungsgrad, Vegetationshöhe, Relief, Geologie, Wanderwege.
 - Teilbare Links: Position, Zoom und Pilzart stehen in der URL (`#13/47.05/8.30/steinpilz`).
 
@@ -94,6 +95,19 @@ Overlay, Standort-Check, Wetterdiagramm, Suche und Plätze ohne Internetverbindu
 - `api.open-meteo.com` – Niederschlag, Temperatur, Bodentemperatur (6 cm)
 
 Geodaten © swisstopo, BAFU, WSL (Open Government Data). Wetter © Open-Meteo.com (CC BY 4.0). Karte: Leaflet (BSD-2).
+
+## Ortssuche: warum ein eigenes Ranking?
+
+Der SearchServer von geo.admin.ch sortiert Treffer nach seinem internen Rang – Postleitzahl und Gemeinde
+zuerst. Deren Koordinate ist aber nur ein «Punkt auf der Fläche» (`ST_PointOnSurface`), der bei grossen
+oder unregelmässigen Flächen kilometerweit vom Dorf entfernt liegen kann (Beispiel Siebnen SZ: die PLZ-Fläche
+8854 reicht weit ins Hügelland). Die eigentliche Ortschaft aus swissNAMES3D (Rang 5) hat dagegen einen Punkt
+im Siedlungsgebiet, kommt aber erst weiter hinten – oder fällt bei kleinem Limit ganz weg.
+
+Die App stellt deshalb zwei Abfragen parallel (alle Herkunftsarten sowie nur Namen aus swissNAMES3D) und
+ordnet in `js/model/places.js` neu: exakte Namenstreffer zuerst, Ortschaften vor Gemeinden, PLZ und Adressen;
+PLZ- und Gemeinde-Treffer rasten auf die gleichnamige Ortschaft ein (in der Liste als «→ Ortszentrum»
+gekennzeichnet). Enter wählt den besten Treffer, die Pfeiltasten wechseln die Auswahl.
 
 ## Wie aktuell sind die Daten?
 

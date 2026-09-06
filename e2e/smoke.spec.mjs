@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { installMocks } from './mocks.mjs';
+import { installMocks, SIEBNEN_ORT, SIEBNEN_PLZ_PUNKT } from './mocks.mjs';
 
 test.describe('Pilzkarte Schweiz – Smoke', () => {
   test('Analyse, Overlay, Standort-Check, Wetter, Suche, Plätze', async ({ page }) => {
@@ -73,9 +73,21 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
     await expect(page.locator('#weather-chart .chart-tip')).toBeVisible();
     await expect(page.locator('#weather-chart .chart-tip')).toContainText('Niederschlag');
 
-    // Suche
+    // Google-Maps-Buttons im Standort-Check und in der Platzliste
+    await page.locator('.tabs [data-tab="punkt"]').click();
+    await expect(page.locator('#link-google-route')).toBeVisible();
+    await expect(page.locator('#link-google-route')).toHaveAttribute('href', /^https:\/\/www\.google\.com\/maps\/dir\/\?api=1&destination=47\.\d+%2C8\.\d+&travelmode=driving$/);
+    await expect(page.locator('#link-google-show')).toHaveAttribute('href', /maps\/search\/\?api=1&query=47\./);
+    await expect(page.locator('#nav-hint')).toBeVisible();
+    await page.locator('.tabs [data-tab="plaetze"]').click();
+    await expect(page.locator('#spots-list a.btn-nav')).toHaveCount(1);
+    await expect(page.locator('#spots-list a.btn-nav')).toHaveAttribute('href', /maps\/dir\/\?api=1&destination=/);
+    await expect(page.locator('#spots-list a.btn-nav')).toHaveAttribute('target', '_blank');
+
+    // Suche: Ortschaft zuoberst, Enter nimmt den besten Treffer
     await page.locator('#search-input').fill('Luz');
-    await expect(page.locator('#search-results li')).toHaveCount(1);
+    await expect(page.locator('#search-results li').first()).toContainText('Luzern');
+    await expect(page.locator('#search-results li').first().locator('.kind')).toHaveText('Ortschaft');
     await page.locator('#search-results li').first().click();
     await expect(page.locator('#search-results')).toBeHidden();
     expect(page.url()).toMatch(/#1[2-9]\/47\.05/);
@@ -121,6 +133,51 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
     await expect(page.locator('#inspector')).toContainText('Ausserhalb der Saison');
     await expect(page.locator('#inspector .season-note')).toBeVisible();
 
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  test('Suche Siebnen: landet im Dorf, nicht auf dem PLZ-Flächenpunkt', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+    const counters = {};
+    await installMocks(page, counters);
+    await page.goto('/#8/46.95000/8.10000/steinpilz');
+
+    await page.locator('#search-input').fill('Siebnen');
+    const items = page.locator('#search-results li');
+    await expect(items.first()).toContainText('Siebnen');
+    await expect(items.first().locator('.kind')).toHaveText('Ortschaft');
+    // Die PLZ ist eingerastet und zeigt das an
+    const plz = items.filter({ has: page.locator('.kind', { hasText: 'PLZ' }) });
+    await expect(plz).toHaveCount(1);
+    await expect(plz.locator('.snapped')).toHaveText('→ Ortszentrum');
+    // zwei parallele Abfragen (alle Herkünfte + nur Namen)
+    expect(counters.search).toBe(2);
+
+    // Enter wählt den besten Treffer
+    await page.locator('#search-input').press('Enter');
+    await expect(page.locator('#search-results')).toBeHidden();
+    const center = await page.evaluate(() => { const c = window.__pilzkarte.map.getCenter(); return { lat: c.lat, lon: c.lng }; });
+    expect(Math.abs(center.lat - SIEBNEN_ORT.lat)).toBeLessThan(0.001);
+    expect(Math.abs(center.lon - SIEBNEN_ORT.lon)).toBeLessThan(0.001);
+    expect(Math.abs(center.lat - SIEBNEN_PLZ_PUNKT.lat)).toBeGreaterThan(0.02);
+    expect(await page.evaluate(() => window.__pilzkarte.map.getZoom())).toBeGreaterThanOrEqual(14);
+
+    // Auch der PLZ-Treffer führt ins Dorf
+    await page.locator('#search-input').fill('Siebnen');
+    await page.locator('#search-results li').filter({ has: page.locator('.kind', { hasText: 'PLZ' }) }).click();
+    const c2 = await page.evaluate(() => { const c = window.__pilzkarte.map.getCenter(); return { lat: c.lat, lon: c.lng }; });
+    expect(Math.abs(c2.lat - SIEBNEN_ORT.lat)).toBeLessThan(0.001);
+
+    // Pfeiltasten wechseln die Auswahl (alte Liste erst schliessen, damit die neue sicher da ist)
+    await page.locator('#search-input').press('Escape');
+    await expect(page.locator('#search-results')).toBeHidden();
+    await page.locator('#search-input').fill('Sieb');
+    await expect(page.locator('#search-results')).toBeVisible();
+    await expect(page.locator('#search-results li').first()).toHaveAttribute('aria-selected', 'true');
+    await page.locator('#search-input').press('ArrowDown');
+    await expect(page.locator('#search-results li').nth(1)).toHaveAttribute('aria-selected', 'true');
+    await page.screenshot({ path: 'e2e/screenshots/suche-siebnen.png' });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 

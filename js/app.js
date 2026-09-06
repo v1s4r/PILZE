@@ -10,6 +10,7 @@ import { HeatLayer } from './map/overlay.js';
 import { fetchHeight, searchLocations } from './api/geoadmin.js';
 import { fetchWeather } from './api/weather.js';
 import { toLv95Int } from './geo/lv95.js';
+import { googleMapsRouteUrl, googleMapsShowUrl } from './model/places.js';
 import { el, clear, toast, debounce } from './ui/dom.js';
 import { renderWeatherChart, renderWeatherTable } from './ui/chart.js';
 import { renderInspector } from './ui/inspector.js';
@@ -304,6 +305,9 @@ async function inspectPoint(latlng, { silent = false } = {}) {
   const link = $('link-geoadmin');
   link.href = `https://map.geo.admin.ch/#/map?lang=de&center=${p.E},${p.N}&z=9&bgLayer=ch.swisstopo.pixelkarte-farbe&layers=${CONFIG.layers.forestMix}`;
   link.hidden = false;
+  const route = $('link-google-route'); route.href = googleMapsRouteUrl(lat, lon); route.hidden = false;
+  const show = $('link-google-show'); show.href = googleMapsShowUrl(lat, lon); show.hidden = false;
+  $('nav-hint').hidden = false;
   updateWeather(lat, lon, `für den gewählten Punkt (${lat.toFixed(4)}, ${lon.toFixed(4)})`, cell.elev);
 }
 map.on('click', (e) => inspectPoint(e.latlng));
@@ -365,7 +369,22 @@ window.addEventListener('resize', debounce(() => { map.invalidateSize(); if (sta
 
 // ---------- Suche ----------
 const searchInput = $('search-input'); const searchResults = $('search-results');
-let searchAbort = null; let searchItems = [];
+let searchAbort = null; let searchItems = []; let searchActive = -1;
+function renderSearchResults() {
+  clear(searchResults);
+  if (searchItems.length === 0) { searchResults.append(el('li', { class: 'muted', text: 'Nichts gefunden.' })); return; }
+  searchItems.forEach((it, i) => {
+    searchResults.append(el('li', {
+      role: 'option', id: `search-opt-${i}`, 'aria-selected': i === searchActive ? 'true' : 'false',
+      onclick: () => goToResult(it),
+    }, [
+      el('span', { text: it.name }),
+      el('span', { class: `kind ${it.kind}`, text: it.kindLabel }),
+      it.snapped ? el('span', { class: 'snapped', text: '→ Ortszentrum' }) : null,
+      it.context ? el('span', { class: 'detail', text: it.context }) : null,
+    ]));
+  });
+}
 const doSearch = debounce(async () => {
   const q = searchInput.value.trim();
   if (q.length < 2) { searchResults.hidden = true; return; }
@@ -373,11 +392,8 @@ const doSearch = debounce(async () => {
   searchAbort = new AbortController();
   try {
     searchItems = await searchLocations(q, { signal: searchAbort.signal });
-    clear(searchResults);
-    if (searchItems.length === 0) searchResults.append(el('li', { class: 'muted', text: 'Nichts gefunden.' }));
-    for (const it of searchItems) {
-      searchResults.append(el('li', { role: 'option', onclick: () => goToResult(it) }, [el('span', { text: it.label }), it.detail && it.detail !== it.label.toLowerCase() ? el('span', { class: 'detail', text: it.detail }) : null]));
-    }
+    searchActive = searchItems.length ? 0 : -1;
+    renderSearchResults();
     searchResults.hidden = false;
   } catch (e) {
     if (e && e.name === 'AbortError') return;
@@ -386,15 +402,24 @@ const doSearch = debounce(async () => {
 }, 300);
 function goToResult(it) {
   searchResults.hidden = true;
-  searchInput.value = it.label;
+  searchInput.value = it.name;
   map.setView([it.lat, it.lon], Math.max(it.zoom, CONFIG.grid.minZoom + 1));
 }
 searchInput.addEventListener('input', doSearch);
 searchInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') searchResults.hidden = true;
-  if (e.key === 'Enter') { e.preventDefault(); if (searchItems[0]) goToResult(searchItems[0]); }
+  if (e.key === 'Escape') { searchResults.hidden = true; return; }
+  if (searchResults.hidden || searchItems.length === 0) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const d = e.key === 'ArrowDown' ? 1 : -1;
+    searchActive = (searchActive + d + searchItems.length) % searchItems.length;
+    renderSearchResults();
+    const opt = document.getElementById(`search-opt-${searchActive}`);
+    if (opt) opt.scrollIntoView({ block: 'nearest' });
+  }
+  if (e.key === 'Enter') { e.preventDefault(); goToResult(searchItems[Math.max(0, searchActive)]); }
 });
-$('search-form').addEventListener('submit', (e) => { e.preventDefault(); if (searchItems[0]) goToResult(searchItems[0]); });
+$('search-form').addEventListener('submit', (e) => { e.preventDefault(); if (searchItems.length) goToResult(searchItems[Math.max(0, searchActive)]); });
 document.addEventListener('click', (e) => { if (!e.target.closest('.search')) searchResults.hidden = true; });
 
 // ---------- Standort ----------
@@ -419,7 +444,15 @@ function refreshSpots() {
   spotLayer.clearLayers();
   for (const s of state.spots) {
     L.marker([s.lat, s.lon], { icon: L.divIcon({ className: 'spot-icon', html: '🍄', iconSize: [24, 24], iconAnchor: [12, 12] }), title: s.name })
-      .bindPopup(() => { const d = el('div'); d.append(el('strong', { text: s.name }), el('br'), el('span', { text: speciesName(s.speciesId) })); return d; })
+      .bindPopup(() => {
+        const d = el('div', { class: 'spot-popup' });
+        d.append(
+          el('strong', { text: s.name }), el('br'),
+          el('span', { text: speciesName(s.speciesId) }), el('br'),
+          el('a', { class: 'btn btn-nav', href: googleMapsRouteUrl(s.lat, s.lon), target: '_blank', rel: 'noopener', text: '🧭 Route mit Google Maps' }),
+        );
+        return d;
+      })
       .addTo(spotLayer);
   }
 }

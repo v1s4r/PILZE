@@ -2,6 +2,7 @@
 // Alle Dienste liefern CORS-Header, die App kann sie direkt aus dem Browser aufrufen.
 
 import { CONFIG } from '../config.js';
+import { rankPlaces } from '../model/places.js';
 
 async function getJson(url, init) {
   const res = await fetch(url, init);
@@ -99,27 +100,26 @@ export async function identify(E, N, layerIds, { tolerance = 0, lang = 'de', sig
   }));
 }
 
-/** Ortssuche (Gemeinden, Flurnamen, Adressen, PLZ). */
-export async function searchLocations(text, { limit = 8, lang = 'de', signal } = {}) {
-  const params = new URLSearchParams({ searchText: text, type: 'locations', sr: '4326', limit: String(limit), lang });
-  const data = await getJson(`${CONFIG.api.search}?${params}`, { signal });
-  const results = Array.isArray(data.results) ? data.results : [];
-  return results
-    .map((r) => r.attrs || {})
-    .filter((a) => Number.isFinite(Number(a.lat)) && Number.isFinite(Number(a.lon)))
-    .map((a) => ({
-      label: stripTags(String(a.label || '')),
-      detail: String(a.detail || ''),
-      lat: Number(a.lat),
-      lon: Number(a.lon),
-      zoom: Number.isFinite(Number(a.zoomlevel)) ? Math.min(16, Math.max(11, Number(a.zoomlevel))) : 13,
-      origin: a.origin,
-    }));
+/**
+ * Ortssuche. Der SearchServer sortiert nach seinem Rang (PLZ, Gemeinde, … zuerst) und deren
+ * Koordinaten sind nur «Punkte auf der Fläche». Deshalb werden zwei Abfragen parallel gestellt
+ * (alle Herkunftsarten + nur Namen aus swissNAMES3D) und die Treffer in places.js neu geordnet:
+ * Ortschaften zuerst, PLZ/Gemeinde auf die Ortschaft eingerastet.
+ */
+export async function searchLocations(text, { limit = 25, lang = 'de', signal } = {}) {
+  const q = (origins, lim) => {
+    const params = new URLSearchParams({ searchText: text, type: 'locations', sr: '4326', limit: String(lim), lang });
+    if (origins) params.set('origins', origins);
+    return getJson(`${CONFIG.api.search}?${params}`, { signal })
+      .then((data) => (Array.isArray(data.results) ? data.results : []).map((r) => r.attrs || {}));
+  };
+  const [all, names] = await Promise.all([
+    q('zipcode,gg25,gazetteer,address', limit),
+    q('gazetteer', 15).catch(() => []),
+  ]);
+  return rankPlaces([...all, ...names], text);
 }
 
-function stripTags(s) {
-  return s.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-}
 
 /** WMS-GetMap-URL (EPSG:3857) für einen Layer und eine Mercator-Bounding-Box. */
 export function wmsUrl(layerId, bbox, width, height) {

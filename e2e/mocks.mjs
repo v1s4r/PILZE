@@ -75,6 +75,22 @@ export function weatherJson() {
   };
 }
 
+/** Realistische SearchServer-Antworten. Siebnen: PLZ-Flächenpunkt liegt 3 km vom Dorf entfernt. */
+export const SIEBNEN_ORT = { lat: 47.1745, lon: 8.8965 };
+export const SIEBNEN_PLZ_PUNKT = { lat: 47.1420, lon: 8.9300 };
+export const SEARCH_SIEBNEN = [
+  { origin: 'zipcode', rank: 1, label: '<b>8854 - Siebnen</b>', detail: '8854', lat: SIEBNEN_PLZ_PUNKT.lat, lon: SIEBNEN_PLZ_PUNKT.lon, zoomlevel: -1 },
+  { origin: 'gg25', rank: 2, label: '<b>Schübelbach (SZ)</b>', detail: 'schuebelbach sz', lat: 47.15, lon: 8.935, zoomlevel: -1 },
+  { origin: 'gazetteer', rank: 5, label: '<b>Siebnen</b> (SZ) - Schübelbach', detail: 'siebnen schuebelbach', objectclass: 'TLM_SIEDLUNGSNAME', lat: SIEBNEN_ORT.lat, lon: SIEBNEN_ORT.lon, zoomlevel: 9 },
+  { origin: 'gazetteer', rank: 6, label: '<b>Siebnen-Wangen</b> (SZ) - Wangen (SZ)', detail: 'siebnen-wangen', objectclass: 'TLM_HALTESTELLE', lat: 47.18, lon: 8.89, zoomlevel: 9 },
+  { origin: 'address', rank: 7, label: 'Siebnerstrasse 12 <b>8854 Siebnen</b>', detail: 'siebnerstrasse 12 8854 siebnen', lat: 47.175, lon: 8.897, zoomlevel: 10 },
+];
+export const SEARCH_LUZERN = [
+  { origin: 'zipcode', rank: 1, label: '<b>6003 - Luzern</b>', detail: '6003', lat: 47.04, lon: 8.30, zoomlevel: -1 },
+  { origin: 'gg25', rank: 2, label: '<b>Luzern (LU)</b>', detail: 'luzern lu', lat: 47.06, lon: 8.32, zoomlevel: -1 },
+  { origin: 'gazetteer', rank: 5, label: '<b>Luzern</b> (LU) - Luzern', detail: 'luzern', objectclass: 'TLM_SIEDLUNGSNAME', lat: 47.0502, lon: 8.3093, zoomlevel: 9 },
+];
+
 /** Registriert alle Routen-Mocks auf einer Playwright-Page. */
 export async function installMocks(page, counters = {}) {
   const count = (k) => { counters[k] = (counters[k] || 0) + 1; };
@@ -102,8 +118,16 @@ export async function installMocks(page, counters = {}) {
   });
   await page.route(/api3\.geo\.admin\.ch\/rest\/services\/api\/SearchServer/, async (route) => {
     count('search');
-    const body = { results: [{ id: 1, weight: 1, attrs: { label: '<b>Luzern</b> (LU)', detail: 'luzern', lat: 47.0502, lon: 8.3093, zoomlevel: 12, origin: 'gg25' } }] };
-    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
+    const u = new URL(route.request().url());
+    const text = (u.searchParams.get('searchText') || '').toLowerCase();
+    const origins = (u.searchParams.get('origins') || 'zipcode,gg25,district,kantone,gazetteer,address').split(',');
+    const all = text.startsWith('sieb') ? SEARCH_SIEBNEN : SEARCH_LUZERN;
+    // Dienst-Verhalten: nach rank aufsteigend sortiert, nach origins gefiltert
+    const results = all
+      .filter((a) => origins.includes(a.origin))
+      .sort((a, b) => a.rank - b.rank)
+      .map((attrs, i) => ({ id: i + 1, weight: 1, attrs }));
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ results }) });
   });
   await page.route(/wms\.geo\.admin\.ch/, async (route) => {
     count('wms');
