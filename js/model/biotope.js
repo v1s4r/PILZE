@@ -1,0 +1,188 @@
+// Biotop-Bewertung: kombiniert Wald, Baumarten, Höhe, Boden, Exposition und Hangneigung
+// zu einem Potenzial-Score (0–1) pro Rasterzelle.
+//
+// Das Modell sagt "hier könnten die Bedingungen passen" – nicht "hier wachsen Pilze".
+
+import { SPECIES_BY_ID } from './species.js';
+
+export const WEIGHTS = { trees: 1.0, elevation: 1.0, soil: 0.7, aspect: 0.5, slope: 0.4 };
+
+export const UNKNOWN = { forest: 0.6, trees: 0.7, soil: 0.75, elevation: 0.5 };
+
+export function clamp(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
+
+export function trapezoid(x, [a, b, c, d]) {
+  if (!Number.isFinite(x) || x <= a || x >= d) return 0;
+  if (x < b) return (x - a) / (b - a);
+  if (x <= c) return 1;
+  return (d - x) / (d - c);
+}
+
+export function smoothstep(e0, e1, x) {
+  const t = clamp((x - e0) / (e1 - e0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+/** Waldanteil der Zelle (0–1) -> Faktor. 'edge' bevorzugt teilbewaldete Zellen (Waldrand). */
+export function forestFactor(species, forestFrac) {
+  if (forestFrac == null || !Number.isFinite(forestFrac)) return UNKNOWN.forest;
+  if (species.forestPref === 'edge') {
+    if (forestFrac < 0.03) return 0;
+    return clamp(1 - Math.abs(forestFrac - 0.45) / 0.6, 0.35, 1);
+  }
+  return smoothstep(0.12, 0.65, forestFrac);
+}
+
+/** Laubholzanteil (0 = reiner Nadelwald, 1 = reiner Laubwald) -> Baumarten-Faktor. */
+export function treeFactor(species, decidShare) {
+  if (decidShare == null || !Number.isFinite(decidShare)) return UNKNOWN.trees;
+  const d = clamp(decidShare, 0, 1);
+  const t = species.trees;
+  const base = t.conifer * (1 - d) + t.deciduous * d;
+  const mixed = (t.mixedBonus || 0) * (1 - Math.abs(2 * d - 1));
+  return clamp(base + mixed, 0, 1);
+}
+
+export function elevationFactor(species, elev) {
+  if (!Number.isFinite(elev)) return UNKNOWN.elevation;
+  return 0.03 + 0.97 * trapezoid(elev, species.elevation);
+}
+
+/** Säure-Index (0 sauer … 1 kalkreich) -> Faktor. */
+export function soilFactor(species, soilIdx) {
+  if (soilIdx == null || !Number.isFinite(soilIdx)) return UNKNOWN.soil;
+  const z = (soilIdx - species.soil.pref) / species.soil.tol;
+  return 0.12 + 0.88 * Math.exp(-z * z);
+}
+
+/** Hangneigung in Grad -> Faktor (flach ok, mässig ideal, steil schlecht). */
+export function slopeFactor(_species, slopeDeg) {
+  if (!Number.isFinite(slopeDeg)) return 0.9;
+  if (slopeDeg < 3) return 0.85;
+  if (slopeDeg <= 25) return 1;
+  if (slopeDeg <= 40) return 1 - ((slopeDeg - 25) / 15) * 0.5;
+  return 0.35;
+}
+
+/**
+ * Exposition (Grad im Uhrzeigersinn ab Nord) -> Faktor, abhängig von der Jahreszeit:
+ * im Hochsommer sind kühle, feuchte Nordlagen im Vorteil, im Spätherbst und Frühling
+ * die wärmeren Südlagen.
+ */
+export function aspectFactor(species, aspectDeg, slopeDeg, month) {
+  if (!Number.isFinite(aspectDeg) || !Number.isFinite(slopeDeg) || slopeDeg < 3) return 0.92;
+  const northness = Math.cos((aspectDeg * Math.PI) / 180); // 1 = Nord, -1 = Süd
+  const shade = species.shadePref ?? 0.5;
+  const sun = species.sunPref ?? 0.4;
+  // Gewichtung Sommer (1) … Winterhalbjahr/Frühling (0)
+  const warm = warmSeasonWeight(month);
+  const shadeTerm = 1 - shade * 0.45 * ((1 - northness) / 2);
+  const sunTerm = 1 - sun * 0.45 * ((1 + northness) / 2);
+  return clamp(warm * shadeTerm + (1 - warm) * sunTerm, 0.3, 1);
+}
+
+export function warmSeasonWeight(month) {
+  // Jun–Aug: 1, Sep: 0.6, Okt: 0.3, Nov–Mrz: 0, Apr: 0.2, Mai: 0.6
+  const table = { 1: 0, 2: 0, 3: 0, 4: 0.2, 5: 0.6, 6: 1, 7: 1, 8: 1, 9: 0.6, 10: 0.3, 11: 0, 12: 0 };
+  return table[month] ?? 0.5;
+}
+
+export function seasonFactor(species, month) {
+  const [a, b] = species.season;
+  const inSeason = a <= b ? month >= a && month <= b : month >= a || month <= b;
+  if (inSeason) return 1;
+  const before = ((a - month + 12) % 12);
+  const after = ((month - b + 12) % 12);
+  if (before === 1 || after === 1) return 0.45;
+  return 0.12;
+}
+
+/**
+ * Bewertet eine Zelle für eine Art.
+ * @param {object} species Profil aus species.js (oder COMBINED)
+ * @param {{elev:number, slope:number, aspect:number, forestFrac:number|null, decid:number|null, soil:number|null}} cell
+ * @param {number} month 1–12
+ */
+export function scoreCell(species, cell, month) {
+  if (species.combine) {
+    let best = null;
+    for (const id of species.combine) {
+      const r = scoreCell(SPECIES_BY_ID[id], cell, month);
+      if (!best || r.score > best.score) best = { ...r, speciesId: id };
+    }
+    return best;
+  }
+  const f = {
+    forest: forestFactor(species, cell.forestFrac),
+    trees: treeFactor(species, cell.decid),
+    elevation: elevationFactor(species, cell.elev),
+    soil: soilFactor(species, cell.soil),
+    aspect: aspectFactor(species, cell.aspect, cell.slope, month),
+    slope: slopeFactor(species, cell.slope),
+  };
+  const score = f.forest *
+    Math.pow(f.trees, WEIGHTS.trees) *
+    Math.pow(f.elevation, WEIGHTS.elevation) *
+    Math.pow(f.soil, WEIGHTS.soil) *
+    Math.pow(f.aspect, WEIGHTS.aspect) *
+    Math.pow(f.slope, WEIGHTS.slope);
+  return { score: clamp(score, 0, 1), factors: f, speciesId: species.id };
+}
+
+export const CLASSES = [
+  { min: 0.65, key: 'hoch', label: 'Hohes Potenzial', color: '#b3121b' },
+  { min: 0.45, key: 'mittel', label: 'Mittleres Potenzial', color: '#e0353b' },
+  { min: 0.3, key: 'gering', label: 'Geringes Potenzial', color: '#f08a8e' },
+  { min: 0, key: 'kein', label: 'Kein Potenzial', color: 'transparent' },
+];
+
+export function classify(score) {
+  return CLASSES.find((c) => score >= c.min) || CLASSES[CLASSES.length - 1];
+}
+
+export function aspectLabel(deg) {
+  if (!Number.isFinite(deg)) return '–';
+  const names = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
+  return names[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+}
+
+export function soilLabel(idx) {
+  if (idx == null || !Number.isFinite(idx)) return 'unbekannt';
+  if (idx < 0.3) return 'sauer / kalkarm';
+  if (idx < 0.62) return 'neutral / gemischt';
+  return 'kalkreich / basisch';
+}
+
+/**
+ * Leitet aus Gesteinsbezeichnungen (GK500) einen Säure-Index ab.
+ * 0 = silikatisch/sauer, 0.5 = neutral, 1 = karbonatisch/basisch.
+ * @param {string[]} texts Attributtexte der Geologie-Layer
+ * @returns {{index:number|null, matched:string[]}}
+ */
+export function soilIndexFromRockText(texts) {
+  const rules = [
+    { re: /kalk|calc|dolomit|karbonat|carbonat|rauwacke|gips|anhydrit|kreide|marmor/i, v: 1.0, w: 1.0, tag: 'Karbonat' },
+    { re: /mergel|marn/i, v: 0.85, w: 0.9, tag: 'Mergel' },
+    { re: /nagelfluh|konglomerat|conglom/i, v: 0.7, w: 0.6, tag: 'Konglomerat' },
+    { re: /flysch/i, v: 0.7, w: 0.6, tag: 'Flysch' },
+    { re: /molasse/i, v: 0.55, w: 0.6, tag: 'Molasse' },
+    { re: /löss|loess|lehm/i, v: 0.55, w: 0.5, tag: 'Löss/Lehm' },
+    { re: /schotter|kies|alluvi|fluss|bach|schwemm|aue/i, v: 0.62, w: 0.5, tag: 'Schotter' },
+    { re: /moräne|morän|moraine|glazial/i, v: 0.5, w: 0.5, tag: 'Moräne' },
+    { re: /sandstein|grès|arkose/i, v: 0.35, w: 0.7, tag: 'Sandstein' },
+    { re: /tonschiefer|schiefer|phyllit/i, v: 0.35, w: 0.6, tag: 'Schiefer' },
+    { re: /granit|gneis|gneiss|silikat|silicat|quarz|kristallin|cristallin|glimmer|amphibolit|gabbro|diorit|syenit|vulkanit|porphyr|rhyolith|basalt|migmatit|eklogit|serpentinit|peridotit|verrucano|radiolarit|hornfels|paragneis|orthogneis/i, v: 0.05, w: 1.0, tag: 'Silikat' },
+    { re: /torf|moor|humus|sumpf/i, v: 0.1, w: 0.8, tag: 'Torf' },
+    { re: /gehängeschutt|schutt|blockschutt|bergsturz|sackung|rutsch/i, v: 0.5, w: 0.2, tag: 'Schutt' },
+    { re: /künstlich|auffüllung|deponie|siedlung/i, v: 0.5, w: 0.1, tag: 'Anthropogen' },
+  ];
+  let sum = 0; let wsum = 0; const matched = [];
+  for (const t of texts) {
+    if (!t) continue;
+    for (const r of rules) {
+      if (r.re.test(t)) { sum += r.v * r.w; wsum += r.w; matched.push(r.tag); }
+    }
+  }
+  if (wsum === 0) return { index: null, matched: [] };
+  return { index: clamp(sum / wsum, 0, 1), matched: [...new Set(matched)] };
+}

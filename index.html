@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Interaktive Pilzbiotop-Karte für die Schweiz: Wald, Höhe, Boden, Exposition und Regen-Timing zeigen, wo die Bedingungen für Speisepilze passen könnten.">
+  <title>Pilzkarte Schweiz</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍄%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand" title="Pilzkarte Schweiz"><span class="brand-icon">🍄</span><span class="brand-text">Pilzkarte Schweiz</span></div>
+    <form id="search-form" class="search" role="search" autocomplete="off">
+      <input id="search-input" type="search" placeholder="Ort, Gemeinde, Flurname, Adresse…" aria-label="Ort suchen" aria-autocomplete="list" aria-controls="search-results">
+      <ul id="search-results" role="listbox" hidden></ul>
+    </form>
+    <button id="btn-locate" class="icon-btn" type="button" title="Mein Standort" aria-label="Mein Standort">📍</button>
+    <button id="btn-panel-toggle" class="icon-btn only-mobile" type="button" title="Panel ein-/ausblenden" aria-label="Panel ein-/ausblenden">☰</button>
+  </header>
+
+  <main id="layout">
+    <div id="map-wrap">
+      <div id="map" role="application" aria-label="Karte"></div>
+      <button id="fab-analyze" type="button" class="fab">🍄 Hier analysieren</button>
+      <div id="map-legend" class="map-legend" hidden>
+        <span class="swatch s1"></span><span>gering</span>
+        <span class="swatch s2"></span><span>mittel</span>
+        <span class="swatch s3"></span><span>hoch</span>
+      </div>
+    </div>
+
+    <aside id="panel" aria-label="Werkzeuge">
+      <div class="sheet-handle only-mobile" id="sheet-handle" aria-hidden="true"></div>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="karte" class="active" aria-selected="true">Karte</button>
+        <button role="tab" data-tab="wetter" aria-selected="false">Pilzwetter</button>
+        <button role="tab" data-tab="punkt" aria-selected="false">Punkt</button>
+        <button role="tab" data-tab="plaetze" aria-selected="false">Plätze</button>
+        <button role="tab" data-tab="info" aria-selected="false">Info</button>
+      </nav>
+
+      <section class="tab-page active" data-page="karte" role="tabpanel">
+        <h2>Pilzart</h2>
+        <div id="species-list" class="chips" role="radiogroup" aria-label="Pilzart"></div>
+        <p id="species-tip" class="tip"></p>
+
+        <div class="row">
+          <button id="btn-analyze" type="button" class="primary">Ausschnitt analysieren</button>
+          <label class="check"><input id="auto-analyze" type="checkbox" checked> automatisch nach Kartenbewegung</label>
+        </div>
+        <div id="progress" class="progress" hidden><div id="progress-bar"></div></div>
+        <p id="status-text" class="status">Zoome auf ein Gebiet (mindestens Zoomstufe 11) und starte die Analyse.</p>
+
+        <h2>Legende</h2>
+        <div class="legend">
+          <div class="legend-bar"></div>
+          <div class="legend-labels"><span>geringes Potenzial</span><span>mittel</span><span>hoch</span></div>
+          <p class="muted">Rote Flächen zeigen, wo Wald, Baumarten, Höhenlage, Bodensäure, Exposition und Hangneigung zum Biotop-Profil der gewählten Art passen. Es ist ein Modell: «Hier könnten die Bedingungen passen» – nicht «hier hat jemand Pilze gefunden».</p>
+        </div>
+        <ul id="source-status" class="sources"></ul>
+
+        <details class="settings">
+          <summary>Einstellungen</summary>
+          <label>Jahreszeit (für Exposition &amp; Saison)
+            <select id="month-select"></select>
+          </label>
+          <label>Deckkraft der roten Flächen <span id="opacity-value"></span>
+            <input id="opacity" type="range" min="0.2" max="1" step="0.05">
+          </label>
+          <label>Anzeigeschwelle (Score) <span id="threshold-value"></span>
+            <input id="threshold" type="range" min="0.15" max="0.7" step="0.05">
+          </label>
+          <label class="check"><input id="include-soil" type="checkbox" checked> Geologie/Bodensäure abfragen (langsamer)</label>
+        </details>
+      </section>
+
+      <section class="tab-page" data-page="wetter" role="tabpanel">
+        <h2>Regen-Timing</h2>
+        <p id="weather-location" class="muted">für die Kartenmitte</p>
+        <div id="weather-status" class="status-card"><span class="big">–</span><span>Noch keine Wetterdaten geladen.</span></div>
+        <p id="weather-text" class="tip"></p>
+        <div id="weather-chart" class="chart"></div>
+        <details class="table-view">
+          <summary>Als Tabelle anzeigen</summary>
+          <div id="weather-table" class="table-wrap"></div>
+        </details>
+        <p class="muted small">Modell: Bodenfeuchte-Bilanz + Fruchtungsfenster nach ergiebigem Regen (artabhängig), begrenzt durch Luft- und Bodentemperatur, Frost und Saison. Wetterdaten: Open-Meteo (ICON-CH von MeteoSchweiz).</p>
+        <button id="btn-weather-refresh" type="button">Wetter neu laden</button>
+      </section>
+
+      <section class="tab-page" data-page="punkt" role="tabpanel">
+        <h2>Standort-Check</h2>
+        <div id="inspector"><p class="muted">Tippe auf die Karte, um einen Punkt auszuwerten.</p></div>
+        <div class="row">
+          <button id="btn-save-spot" type="button" class="primary" disabled>Als Platz speichern</button>
+          <a id="link-geoadmin" href="#" target="_blank" rel="noopener" hidden>Auf map.geo.admin.ch öffnen ↗</a>
+        </div>
+      </section>
+
+      <section class="tab-page" data-page="plaetze" role="tabpanel">
+        <h2>Meine Plätze</h2>
+        <p class="muted small">Plätze werden nur lokal in deinem Browser gespeichert.</p>
+        <ul id="spots-list" class="spots"></ul>
+        <div class="row">
+          <button id="btn-export-spots" type="button">Exportieren (JSON)</button>
+          <label class="file-btn">Importieren<input id="file-import-spots" type="file" accept="application/json" hidden></label>
+        </div>
+      </section>
+
+      <section class="tab-page" data-page="info" role="tabpanel">
+        <h2>So funktioniert das Modell</h2>
+        <p>Die Karte wird in ein Raster von rund 50 × 40 Zellen unterteilt. Für jede Zelle werden Standortfaktoren aus den öffentlichen Geodaten des Bundes geladen und mit dem Biotop-Profil der gewählten Pilzart verglichen:</p>
+        <ul>
+          <li><strong>Wald &amp; Baumarten</strong> – Waldmischungsgrad LFI (BAFU/WSL, 10 m): Waldanteil und Laubholz-/Nadelholzanteil.</li>
+          <li><strong>Höhenlage</strong> – swissALTI3D via Höhenprofil-Dienst (swisstopo).</li>
+          <li><strong>Exposition &amp; Hangneigung</strong> – aus dem Höhenraster berechnet; im Hochsommer zählen schattige Nordlagen, im Spätherbst und Frühling sonnige Südlagen.</li>
+          <li><strong>Bodensäure</strong> – Gesteinsklassierung/Lithologie GK500 (swisstopo): Kalk und Mergel → basisch, Granit/Gneis/Silikat → sauer.</li>
+          <li><strong>Regen-Timing</strong> – Open-Meteo: Niederschlag und Temperaturen der letzten 30 Tage plus 7 Tage Prognose; daraus ein täglicher Pilz-Index.</li>
+        </ul>
+        <p>Die Faktoren werden gewichtet multipliziert (Wald und Höhe sind Ausschlusskriterien, Boden, Exposition und Neigung verfeinern). Rote Flächen markieren Zellen über der Anzeigeschwelle.</p>
+        <h2>Wichtig</h2>
+        <ul>
+          <li>Nur sammeln, was du sicher bestimmen kannst. Im Zweifel zur Pilzkontrolle (VAPKO).</li>
+          <li>Kantonale Schonzeiten und Mengenbeschränkungen beachten (z. B. Sammelverbot vom 1. bis 10. jedes Monats in mehreren Kantonen, max. 1–2 kg pro Person und Tag).</li>
+          <li>Naturschutzgebiete, Waldreservate und Privatgrund respektieren.</li>
+        </ul>
+        <h2>Datenquellen</h2>
+        <p class="small">Geodaten: © swisstopo, BAFU, WSL (geo.admin.ch, Open Government Data). Wetter: Open-Meteo.com (CC BY 4.0). Karte: Leaflet.</p>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
