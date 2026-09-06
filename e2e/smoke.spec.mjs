@@ -83,6 +83,13 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
     await expect(page.locator('#spots-list a.btn-nav')).toHaveCount(1);
     await expect(page.locator('#spots-list a.btn-nav')).toHaveAttribute('href', /maps\/dir\/\?api=1&destination=/);
     await expect(page.locator('#spots-list a.btn-nav')).toHaveAttribute('target', '_blank');
+    // Marker-Popup: Route-Link vorhanden und lesbar (weisse Schrift trotz Leaflets Link-Farbe)
+    await page.locator('.spot-icon').first().click();
+    const popupLink = page.locator('.leaflet-popup a.btn-nav');
+    await expect(popupLink).toBeVisible();
+    await expect(popupLink).toHaveAttribute('href', /maps\/dir\/\?api=1&destination=/);
+    await expect(popupLink).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await page.keyboard.press('Escape');
 
     // Suche: Ortschaft zuoberst, Enter nimmt den besten Treffer
     await page.locator('#search-input').fill('Luz');
