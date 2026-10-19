@@ -258,7 +258,7 @@ test.describe('Mastertest', () => {
 
     const box = await page.locator('#map').boundingBox();
     await page.mouse.click(box.x + box.width * 0.35, box.y + box.height * 0.45);
-    await expect(page.locator('#inspector .factor')).toHaveCount(6);
+    await expect(page.locator('#inspector .factor')).toHaveCount(7);
     await expect(page.locator('#inspector')).toContainText(/rot markiert|nicht rot markiert/);
 
     // Google-Maps-Ziel entspricht dem angeklickten Punkt

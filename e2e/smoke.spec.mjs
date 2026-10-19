@@ -63,7 +63,7 @@ test.describe('Pilzkarte Schweiz – Smoke', () => {
     await expect(page.locator('.tabs [data-tab="punkt"]')).toHaveClass(/active/);
     await expect(page.locator('#inspector')).toContainText('Höhe');
     await expect(page.locator('#inspector')).toContainText('Nadelwald');
-    await expect(page.locator('#inspector .factor')).toHaveCount(6);
+    await expect(page.locator('#inspector .factor')).toHaveCount(7);
     await page.screenshot({ path: 'e2e/screenshots/punkt.png' });
 
     // Platz speichern

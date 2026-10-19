@@ -11,7 +11,17 @@ const FACTOR_LABELS = {
   soil: 'Bodensäure',
   aspect: 'Exposition',
   slope: 'Hangneigung',
+  terrain: 'Geländeform',
 };
+
+function gelaendeLabel(c) {
+  if (c == null || !Number.isFinite(c)) return '–';
+  if (c <= -3) return 'ausgeprägte Mulde';
+  if (c <= -0.5) return 'Mulde / Senke';
+  if (c < 0.5) return 'gleichmässiger Hang';
+  if (c < 3) return 'leichte Kuppe';
+  return 'Rücken / Geländekante';
+}
 
 /**
  * @param {HTMLElement} container
@@ -45,7 +55,9 @@ export function renderInspector(container, data) {
   kv('Höhe', fmtNum(cell.elev, 0, ' m ü. M.'));
   kv('Hangneigung', cell.slope == null ? '–' : `${fmtNum(cell.slope, 0, '°')}${cell.slope < 3 ? ' (flach)' : ''}`);
   kv('Exposition', cell.aspect == null ? (cell.slope != null && cell.slope < 3 ? 'flach' : '–') : `${aspectLabel(cell.aspect)} (${Math.round(cell.aspect)}°)`);
+  kv('Geländeform', gelaendeLabel(cell.curvature));
   kv('Waldanteil', fmtPct(cell.forestFrac));
+  kv('Wald ringsum', fmtPct(cell.forestAround));
   kv('Laubholzanteil', cell.decid == null ? '–' : `${fmtPct(cell.decid)} ${treeMixLabel(cell.decid)}`);
   kv('Boden', `${soilLabel(cell.soil)}${cell.soilLabel ? ` – ${cell.soilLabel}` : ''}`);
   kv('Baumpartner', shownSpecies.partners || '–');

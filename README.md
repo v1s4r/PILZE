@@ -42,6 +42,38 @@ annehmen. Die Transformation ist streng monoton, die Rangfolge der Zellen bleibt
 Referenzfällen: guter Standort (alle Teilfaktoren 70–90) → «hoch»; falsche Höhenlage oder falsche Baumart →
 «mittel».
 
+### Warum das Modell die Umgebung und die Geländeform braucht
+
+Eine frühere Fassung bewertete jede Zelle für sich und kam damit über realistisches Waldgelände auf
+**57 % «sehr hohes Potenzial»** – die Karte war bei jeder Schwelle flächendeckend rot. Gemessen an einer
+Simulation über alle Kombinationen von Höhe, Hangneigung, Exposition, Baumartenmischung und Boden waren drei
+der sechs Teilfaktoren praktisch konstant:
+
+| Teilfaktor | Anteil ≥ 0.95 (alt) |
+|---|---|
+| Wald | 100 % |
+| Höhenlage | 81 % |
+| Hangneigung | 63 % |
+| Baumarten | 40 % |
+| Bodensäure | 17 % |
+| Exposition | 0 % |
+
+Was bei fast jeder Zelle am Anschlag steht, trennt nichts. Drei Korrekturen schaffen echte Unterscheidung,
+alle auf Daten, die ohnehin geladen werden:
+
+1. **Höhenlage als Gipfel statt Plateau** – volle Punktzahl nur in der Kernhöhe der Art, an den Rändern der
+   Optimumspanne noch rund 0.73. Vorher galt über die ganze, oft 800 m breite Spanne 1.0.
+2. **Waldumgebung** – der Waldanteil der Nachbarzellen unterscheidet Innenbestand von Randlage. Vorher sahen
+   eine Zelle mitten im geschlossenen Bestand und eine am äussersten Waldrand identisch aus.
+3. **Geländeform** – die Krümmung des Höhenrasters trennt Mulden (feucht) von Rücken und Kanten (trocken).
+
+Zusätzlich fliessen unbekannte Daten neutral statt schmeichelhaft ein (Bodensäure 0.55 statt 0.75), und die
+Gesteinsliste deckt die GK500-Sammelbegriffe ab – «Lockergesteine» lieferte vorher flächendeckend
+«unbekannt».
+
+Ergebnis derselben Simulation nach der Korrektur: **6 % «sehr hoch», 14 % «hoch»** – rot markiert sind damit
+rund 20 % des Waldes statt 66 %.
+
 **Welche Zellen rot werden** (`js/model/heat.js`): Markiert wird genau dann, wenn die Zelle mindestens die
 eingestellte Klasse erreicht (Standard «hohes Potenzial»). Damit sind das Etikett im Standort-Check und die
 rote Fläche auf der Karte **dieselbe Aussage**.

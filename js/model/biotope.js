@@ -5,9 +5,11 @@
 
 import { SPECIES_BY_ID } from './species.js';
 
-export const WEIGHTS = { trees: 1.0, elevation: 1.0, soil: 0.7, aspect: 0.5, slope: 0.4 };
+export const WEIGHTS = { trees: 1.0, elevation: 1.0, soil: 0.7, aspect: 0.5, slope: 0.4, terrain: 0.5 };
 
-export const UNKNOWN = { forest: 0.6, trees: 0.7, soil: 0.75, elevation: 0.5 };
+// Werte für fehlende Daten. Bewusst neutral und nicht schmeichelhaft: eine unbekannte Bodensäure
+// darf eine Zelle nicht so gut dastehen lassen wie eine gemessen passende.
+export const UNKNOWN = { forest: 0.6, trees: 0.7, soil: 0.55, elevation: 0.5, terrain: 0.9 };
 
 export function clamp(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
 
@@ -23,14 +25,25 @@ export function smoothstep(e0, e1, x) {
   return t * t * (3 - 2 * t);
 }
 
-/** Waldanteil der Zelle (0–1) -> Faktor. 'edge' bevorzugt teilbewaldete Zellen (Waldrand). */
-export function forestFactor(species, forestFrac) {
+/**
+ * Wald-Faktor aus dem Waldanteil der Zelle UND dem Waldanteil der Umgebung.
+ *
+ * Ohne die Umgebung sieht jede vollbewaldete Zelle gleich aus – egal ob sie mitten im
+ * geschlossenen Bestand oder am äussersten Waldrand liegt. Genau das machte die Karte
+ * flächendeckend rot. Mit der Umgebung unterscheiden sich Innenbestand und Randlage deutlich,
+ * und Arten mit Vorliebe für Waldränder (Parasol, Reizker, Morchel) kehren die Wertung um.
+ */
+export function forestFactor(species, forestFrac, forestAround) {
   if (forestFrac == null || !Number.isFinite(forestFrac)) return UNKNOWN.forest;
+  const around = Number.isFinite(forestAround) ? forestAround : forestFrac;
   if (species.forestPref === 'edge') {
     if (forestFrac < 0.03) return 0;
-    return clamp(1 - Math.abs(forestFrac - 0.45) / 0.6, 0.35, 1);
+    // Waldrand: die Zelle selbst bestockt, die Umgebung halboffen
+    const rand = clamp(1 - Math.abs(around - 0.5) / 0.5, 0, 1);
+    return clamp(smoothstep(0.05, 0.4, forestFrac) * (0.3 + 0.7 * rand), 0, 1);
   }
-  return smoothstep(0.12, 0.65, forestFrac);
+  // Innenbestand: Zelle bewaldet und von Wald umgeben
+  return smoothstep(0.12, 0.65, forestFrac) * (0.45 + 0.55 * smoothstep(0.35, 0.92, around));
 }
 
 /** Laubholzanteil (0 = reiner Nadelwald, 1 = reiner Laubwald) -> Baumarten-Faktor. */
@@ -43,9 +56,34 @@ export function treeFactor(species, decidShare) {
   return clamp(base + mixed, 0, 1);
 }
 
+/**
+ * Höhenlage. Das blosse Trapez gab über die ganze Optimumspanne 1.0 – bei einer Spanne von oft
+ * 800 Höhenmetern traf das auf fast jeden Schweizer Wald zu und trennte damit nichts. Innerhalb
+ * des Optimums wird deshalb zusätzlich nach der Kernhöhe gewichtet: volle Punktzahl nur in der
+ * Mitte der Spanne, an deren Rändern noch rund 0.73.
+ */
 export function elevationFactor(species, elev) {
   if (!Number.isFinite(elev)) return UNKNOWN.elevation;
-  return 0.03 + 0.97 * trapezoid(elev, species.elevation);
+  const t = trapezoid(elev, species.elevation);
+  if (t <= 0) return 0.03;
+  const [, b, , c] = [species.elevation[0], species.elevation[1], species.elevation[2], species.elevation[2]];
+  const von = species.elevation[1]; const bis = species.elevation[2];
+  const mitte = (von + bis) / 2;
+  const halb = Math.max(1, (bis - von) / 2);
+  const z = (elev - mitte) / halb;
+  const kern = Math.exp(-1.2 * z * z);
+  return 0.03 + 0.97 * t * (0.6 + 0.4 * kern);
+}
+
+/**
+ * Geländeform aus der Krümmung des Höhenrasters (m pro 100 m, negativ = Mulde, positiv = Rücken).
+ * Mulden und flache Verebnungen halten Feuchtigkeit, Rücken und Geländekanten trocknen aus –
+ * für Pilze einer der verlässlichsten Geländehinweise und über echtes Gelände stark streuend.
+ */
+export function terrainFactor(_species, curvature) {
+  if (!Number.isFinite(curvature)) return UNKNOWN.terrain;
+  const z = (curvature + 1.0) / 2.5;
+  return clamp(0.5 + 0.5 * Math.exp(-z * z), 0.5, 1);
 }
 
 /** Säure-Index (0 sauer … 1 kalkreich) -> Faktor. */
@@ -148,19 +186,21 @@ export function scoreCell(species, cell, month) {
     return best;
   }
   const f = {
-    forest: forestFactor(species, cell.forestFrac),
+    forest: forestFactor(species, cell.forestFrac, cell.forestAround),
     trees: treeFactor(species, cell.decid),
     elevation: elevationFactor(species, cell.elev),
     soil: soilFactor(species, cell.soil),
     aspect: aspectFactor(species, cell.aspect, cell.slope, month),
     slope: slopeFactor(species, cell.slope),
+    terrain: terrainFactor(species, cell.curvature),
   };
   const score = clamp(f.forest *
     Math.pow(f.trees, WEIGHTS.trees) *
     Math.pow(f.elevation, WEIGHTS.elevation) *
     Math.pow(f.soil, WEIGHTS.soil) *
     Math.pow(f.aspect, WEIGHTS.aspect) *
-    Math.pow(f.slope, WEIGHTS.slope), 0, 1);
+    Math.pow(f.slope, WEIGHTS.slope) *
+    Math.pow(f.terrain, WEIGHTS.terrain), 0, 1);
   // Bei einer einzeln gewählten Art fliesst die Saison NICHT in den Score ein: die Karte zeigt das
   // Standort-Potenzial, damit man Plätze auch ausserhalb der Saison suchen kann. Die UI weist auf
   // die Saison hin, und der Pilz-Index im Tab «Pilzwetter» berücksichtigt sie.
@@ -234,7 +274,12 @@ export function soilIndexFromRockText(texts) {
     { re: /tonschiefer|schiefer|phyllit/i, v: 0.35, w: 0.6, tag: 'Schiefer' },
     { re: /granit|gneis|gneiss|silikat|silicat|quarz|kristallin|cristallin|glimmer|amphibolit|gabbro|diorit|syenit|vulkanit|porphyr|rhyolith|basalt|migmatit|eklogit|serpentinit|peridotit|verrucano|radiolarit|hornfels|paragneis|orthogneis/i, v: 0.05, w: 1.0, tag: 'Silikat' },
     { re: /torf|moor|humus|sumpf/i, v: 0.1, w: 0.8, tag: 'Torf' },
-    { re: /gehängeschutt|schutt|blockschutt|bergsturz|sackung|rutsch/i, v: 0.5, w: 0.2, tag: 'Schutt' },
+    { re: /gehängeschutt|schutt|blockschutt|bergsturz|sackung|rutsch|hangschutt/i, v: 0.5, w: 0.2, tag: 'Schutt' },
+    // Sammelbegriffe der GK500. Ohne sie blieb ein grosser Teil der Schweiz «unbekannt».
+    { re: /lockergestein|lockermaterial|quartär|quartaer/i, v: 0.5, w: 0.25, tag: 'Lockergestein' },
+    { re: /bündnerschiefer|buendnerschiefer|bunderschiefer/i, v: 0.6, w: 0.6, tag: 'Bündnerschiefer' },
+    { re: /festgestein|grundgebirge|sedimentgestein/i, v: 0.5, w: 0.15, tag: 'Festgestein' },
+    { re: /verwitterung|solifluktion|hanglehm/i, v: 0.45, w: 0.2, tag: 'Verwitterung' },
     { re: /künstlich|auffüllung|deponie|siedlung/i, v: 0.5, w: 0.1, tag: 'Anthropogen' },
   ];
   let sum = 0; let wsum = 0; const matched = [];

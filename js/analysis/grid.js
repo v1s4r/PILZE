@@ -10,7 +10,7 @@ import * as M from '../geo/mercator.js';
 import { toLv95Int, isInSwitzerlandLv95 } from '../geo/lv95.js';
 import { fetchElevationBatch, wmsUrl, loadImage } from '../api/geoadmin.js';
 import { forestStats, imageDataOf } from './raster.js';
-import { slopeAspect } from './terrain.js';
+import { slopeAspect, curvature, neighbourhoodMean } from './terrain.js';
 import { soilNodes, nodeOf } from './geology.js';
 import { scoreCell, clamp } from '../model/biotope.js';
 
@@ -103,14 +103,14 @@ export async function analyze(grid, species, month, { onProgress = () => {}, sig
   for (let k = 0; k < n; k++) if (!Number.isFinite(elev[k])) missing++;
   if (missing === n) status.elevation = 'fehlt';
 
-  const { slope, aspect } = slopeAspect(
-    elev, grid.cols, grid.rows,
-    (j) => grid.dx * M.groundScale(grid.lats[j]),
-    (j) => grid.dy * M.groundScale(grid.lats[j]),
-  );
+  const dxAt = (j) => grid.dx * M.groundScale(grid.lats[j]);
+  const dyAt = (j) => grid.dy * M.groundScale(grid.lats[j]);
+  const { slope, aspect } = slopeAspect(elev, grid.cols, grid.rows, dxAt, dyAt);
+  const curv = curvature(elev, grid.cols, grid.rows, dxAt, dyAt);
+  const forestAround = forest ? neighbourhoodMean(forest.forestFrac, grid.cols, grid.rows, 1) : null;
 
   const cells = {
-    elev, slope, aspect,
+    elev, slope, aspect, curvature: curv, forestAround,
     forestFrac: forest ? forest.forestFrac : null,
     decid: forest ? forest.decid : null,
     soil: soilRes ? soilRes.soil : null,
@@ -142,6 +142,8 @@ export function cellAt(result, k) {
     elev: nz(c.elev[k]),
     slope: nz(c.slope[k]),
     aspect: nz(c.aspect[k]),
+    curvature: c.curvature ? nz(c.curvature[k]) : null,
+    forestAround: c.forestAround ? nz(c.forestAround[k]) : null,
     forestFrac: c.forestFrac ? nz(c.forestFrac[k]) : null,
     decid: c.decid ? nz(c.decid[k]) : null,
     soil: c.soil ? nz(c.soil[k]) : null,

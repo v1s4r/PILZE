@@ -66,7 +66,8 @@ test('Score ist das reine Produkt der Teilfaktoren (keine Nachbearbeitung)', () 
   const r = scoreCell(steinpilz, cell, 9);
   const f = r.factors;
   const erwartet = f.forest * f.trees * f.elevation
-    * Math.pow(f.soil, 0.7) * Math.pow(f.aspect, 0.5) * Math.pow(f.slope, 0.4);
+    * Math.pow(f.soil, 0.7) * Math.pow(f.aspect, 0.5) * Math.pow(f.slope, 0.4)
+    * Math.pow(f.terrain, 0.5);
   assert.ok(Math.abs(r.score - erwartet) < 1e-12, `${r.score} vs ${erwartet}`);
 });
 
